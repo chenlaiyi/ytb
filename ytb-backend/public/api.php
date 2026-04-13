@@ -25,11 +25,11 @@ if (!in_array($host, ['ytb.ddg.org.cn', 'www.ytb.ddg.org.cn'])) {
 
 // 数据库配置
 $dbConfig = [
-    'host' => 'localhost',
+    'host' => '127.0.0.1',
     'port' => 3306,
     'database' => 'ytb_ddg_org_cn',
-    'username' => 'ytb_user',
-    'password' => 'ytb_password',
+    'username' => 'ytb_ddg_org_cn',
+    'password' => 'XYKHzy1DTzR1w1sT',
 ];
 
 // 简单的数据库连接
