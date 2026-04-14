@@ -212,6 +212,10 @@ try {
         $stmt->execute([$todayStart]);
         $todayUsers = (int)$stmt->fetch(PDO::FETCH_ASSOC)['today'] ?? 0;
 
+        // 查询CP总数
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_users WHERE role IN ('scp', 'team_cp', 'boss_cp')");
+        $totalCp = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
         // 查询总订单数和今日订单数（ytb_boss_investments）
         $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_boss_investments WHERE payment_status = 'paid'");
         $totalOrders = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
@@ -232,12 +236,28 @@ try {
             'code' => 0,
             'message' => '操作成功',
             'data' => [
-                'total_users' => $totalUsers,
-                'today_users' => $todayUsers,
-                'total_orders' => $totalOrders,
-                'today_orders' => $todayOrders,
-                'total_revenue' => $totalRevenue,
-                'today_revenue' => $todayRevenue,
+                'overview' => [
+                    'users' => [
+                        'total' => $totalUsers,
+                        'today' => $todayUsers,
+                        'vip_count' => $totalCp,
+                        'vip_rate' => $totalUsers > 0 ? round($totalCp / $totalUsers * 100, 1) : 0
+                    ],
+                    'revenue' => [
+                        'total' => $totalRevenue,
+                        'today' => $todayRevenue
+                    ],
+                    'devices' => [
+                        'total' => 0,
+                        'active' => 0,
+                        'online' => 0,
+                        'online_rate' => 0
+                    ]
+                ],
+                'orders' => [
+                    'total' => $totalOrders,
+                    'today' => $todayOrders
+                ]
             ]
         ]);
         exit;
@@ -555,7 +575,7 @@ try {
             'code' => 0,
             'message' => '操作成功',
             'data' => [
-                'list' => $processedUsers,
+                'data' => $processedUsers,
                 'total' => $total,
                 'page' => $page,
                 'per_page' => $perPage
@@ -581,7 +601,7 @@ try {
         $stmt->execute([$yesterdayStart, $todayStart]);
         $yesterdayUsers = (int)$stmt->fetch(PDO::FETCH_ASSOC)['yesterday'] ?? 0;
 
-        $stmt = $db->prepare("SELECT COUNT(*) as vip_total FROM ytb_users WHERE role IN ('team_cp', 'boss_cp')");
+        $stmt = $db->prepare("SELECT COUNT(*) as vip_total FROM ytb_users WHERE role IN ('scp', 'team_cp', 'boss_cp')");
         $stmt->execute();
         $vipTotal = (int)$stmt->fetch(PDO::FETCH_ASSOC)['vip_total'] ?? 0;
 
@@ -597,7 +617,7 @@ try {
                 'today_users' => $todayUsers,
                 'yesterday_users' => $yesterdayUsers,
                 'vip_total' => $vipTotal,
-                'month_vip' => $monthVip
+                'monthly_vip' => $monthVip
             ]
         ]);
         exit;
