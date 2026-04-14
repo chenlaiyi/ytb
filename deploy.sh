@@ -19,12 +19,16 @@ npm run build
 
 # 2. 部署前端文件
 echo "[2/2] 部署前端文件..."
-ssh $SERVER "mkdir -p $YTB_ROOT/admin/assets"
-rsync -avz --delete dist/assets/ $SERVER:$YTB_ROOT/admin/assets/
+ssh $SERVER "mkdir -p $YTB_ROOT/assets"
+rsync -avz --delete dist/assets/ $SERVER:$YTB_ROOT/assets/
 scp dist/index.html $SERVER:$YTB_ROOT/admin/index.html
 
-# 3. 部署logo到admin目录
-echo "[3/3] 部署logo..."
+# 3. 部署api.php
+echo "[3/3] 部署api.php..."
+scp public/api.php $SERVER:$YTB_ROOT/api.php
+
+# 4. 部署logo到admin目录
+echo "[4/4] 部署logo..."
 scp $SOURCE_DIR/logo.png $SERVER:$YTB_ROOT/admin/logo.png
 
 echo ""

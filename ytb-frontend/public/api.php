@@ -32,6 +32,15 @@ $dbConfig = [
     'password' => 'XYKHzy1DTzR1w1sT',
 ];
 
+// Tapp数据库配置（用于设备等数据）
+$tappDbConfig = [
+    'host' => '127.0.0.1',
+    'port' => 3306,
+    'database' => 'ddg.app',
+    'username' => 'ddg.app',
+    'password' => '8GmWPjwbwY4waXcT',
+];
+
 // 简单的数据库连接
 function getDB() {
     global $dbConfig;
@@ -45,6 +54,22 @@ function getDB() {
             http_response_code(500);
             echo json_encode(['code' => 500, 'message' => '数据库连接失败']);
             exit;
+        }
+    }
+    return $pdo;
+}
+
+// 获取Tapp数据库连接
+function getTappDB() {
+    global $tappDbConfig;
+    static $pdo = null;
+    if ($pdo === null) {
+        try {
+            $dsn = "mysql:host={$tappDbConfig['host']};port={$tappDbConfig['port']};dbname={$tappDbConfig['database']};charset=utf8mb4";
+            $pdo = new PDO($dsn, $tappDbConfig['username'], $tappDbConfig['password']);
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        } catch (PDOException $e) {
+            return null;
         }
     }
     return $pdo;
@@ -620,6 +645,419 @@ try {
                 'monthly_vip' => $monthVip
             ]
         ]);
+        exit;
+    }
+
+    // 设备列表
+    if ($path === 'admin/v1/devices' && $method === 'GET') {
+        $db = getDB(); // 使用YTB自己的数据库
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, intval($_GET['per_page'] ?? 10)));
+        $offset = ($page - 1) * $perPage;
+        $where = [];
+        $params = [];
+
+        // 关键词搜索
+        if (!empty($_GET['keyword'])) {
+            $where[] = "(device_number LIKE ? OR imei LIKE ? OR client_name LIKE ?)";
+            $params[] = '%' . $_GET['keyword'] . '%';
+            $params[] = '%' . $_GET['keyword'] . '%';
+            $params[] = '%' . $_GET['keyword'] . '%';
+        }
+        // 状态筛选
+        if (!empty($_GET['status'])) {
+            $where[] = "status = ?";
+            $params[] = $_GET['status'];
+        }
+        // 网络状态筛选
+        if (!empty($_GET['network_status'])) {
+            $where[] = "network_status = ?";
+            $params[] = $_GET['network_status'];
+        }
+        // 计费模式筛选
+        if (!empty($_GET['billing_mode'])) {
+            $where[] = "billing_mode = ?";
+            $params[] = $_GET['billing_mode'];
+        }
+        // IOT注册筛选
+        if (!empty($_GET['iot_registered'])) {
+            if ($_GET['iot_registered'] === '1') {
+                $where[] = "LENGTH(imei) >= 10";
+            } else {
+                $where[] = "(imei IS NULL OR LENGTH(imei) < 10)";
+            }
+        }
+
+        $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        // 查询总数
+        $countSql = "SELECT COUNT(*) as total FROM ytb_devices $whereClause";
+        $stmt = $db->prepare($countSql);
+        $stmt->execute($params);
+        $total = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 查询列表
+        $listSql = "SELECT * FROM ytb_devices $whereClause ORDER BY create_date DESC LIMIT $offset, $perPage";
+        $stmt = $db->prepare($listSql);
+        $stmt->execute($params);
+        $devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $list = [];
+        foreach ($devices as $d) {
+            // 状态映射
+            $statusMap = ['pending' => '待激活', 'assigned' => '已分配', 'installed' => '已安装', 'activated' => '已激活', 'disabled' => '已禁用'];
+            $networkMap = ['0' => '离线', '1' => '在线'];
+            $billingMap = ['flow' => '流量计费', 'time' => '包年计费', 'retail' => '零售'];
+
+            // 计算进度百分比
+            $waterLevelPct = 0;
+            $daysPct = 0;
+            $isLowWater = false;
+            $isExpireSoon = false;
+
+            if ($d['billing_mode'] == 'flow') {
+                $surplus = floatval($d['surplus_flow'] ?? 0);
+                $totalFlow = floatval($d['total_recharged_flow'] ?? 4500); // 使用总充值流量作为总量
+                $waterLevelPct = $totalFlow > 0 ? min(100, round($surplus / $totalFlow * 100)) : 0;
+                $isLowWater = $surplus < 100;
+            }
+
+            $list[] = [
+                'id' => $d['id'],
+                'device_number' => $d['device_number'] ?? '',
+                'board_code' => $d['board_code'] ?? '',
+                'imei' => $d['imei'] ?? '',
+                'iccid' => $d['iccid'] ?? '',
+                'module_code' => $d['module_code'] ?? '',
+                'brand' => $d['brand'] ?? '',
+                'device_model' => $d['device_model'] ?? '',
+                'product_name' => $d['device_type'] ?? '净水器',
+                'device_type' => $d['device_type'] ?? '净水器',
+                'status' => $d['status'] ?? 'pending',
+                'status_text' => $statusMap[$d['status']] ?? '未知',
+                'network_status' => $d['network_status'] ?? '0',
+                'network_status_text' => $networkMap[$d['network_status']] ?? '未知',
+                'client_name' => $d['client_name'] ?? '',
+                'client_phone' => $d['client_phone'] ?? '',
+                'client_wx_nickname' => '',
+                'address' => $d['client_address'] ?? '',
+                'dealer_name' => $d['dealer_name'] ?? '',
+                'dealer_number' => '',
+                'sale_dealer_name' => '',
+                'billing_mode' => $d['billing_mode'] ?? 'flow',
+                'billing_mode_text' => $billingMap[$d['billing_mode']] ?? '未知',
+                'surplus_flow' => floatval($d['surplus_flow'] ?? 0),
+                'water_level_percentage' => $waterLevelPct,
+                'is_low_water' => $isLowWater,
+                'remaining_days' => 0,
+                'days_percentage' => 0,
+                'is_expire_soon' => false,
+                'cumulative_filtration_flow' => floatval($d['cumulative_flow'] ?? 0),
+                'tds_in' => $d['raw_water_tds'] ?? '',
+                'tds_out' => $d['pure_water_tds'] ?? '',
+                'raw_water_value' => $d['raw_water_tds'] ?? '',
+                'purification_water_value' => $d['pure_water_tds'] ?? '',
+                'water_quality_grade' => '',
+                'activate_date' => $d['activate_date'] ?? '',
+                'service_end_time' => $d['service_end_date'] ?? '',
+                'filter_date' => '',
+                'iot_registered' => !empty($d['imei']) && strlen($d['imei']) >= 10,
+                'created_at' => $d['create_date'] ?? '',
+            ];
+        }
+
+        // 统计
+        $todayStart = date('Y-m-d 00:00:00');
+        $monthStart = date('Y-m-01 00:00:00');
+        $statsStmt = $db->query("
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'activated' THEN 1 ELSE 0 END) as active,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN network_status = '1' THEN 1 ELSE 0 END) as online,
+                SUM(CASE WHEN LENGTH(imei) >= 10 THEN 1 ELSE 0 END) as iot_registered,
+                SUM(CASE WHEN create_date >= '{$todayStart}' THEN 1 ELSE 0 END) as today,
+                SUM(CASE WHEN create_date >= '{$monthStart}' THEN 1 ELSE 0 END) as this_month
+            FROM ytb_devices
+        ");
+        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+        $totalDevices = intval($stats['total'] ?? 0);
+        $onlineDevices = intval($stats['online'] ?? 0);
+
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'data' => $list,
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+                'statistics' => [
+                    'total_devices' => $totalDevices,
+                    'pending_devices' => intval($stats['pending'] ?? 0),
+                    'active_devices' => intval($stats['active'] ?? 0),
+                    'iot_registered_devices' => intval($stats['iot_registered'] ?? 0),
+                    'online_devices' => $onlineDevices,
+                    'offline_devices' => $totalDevices - $onlineDevices,
+                    'online_rate' => $totalDevices > 0 ? round($onlineDevices / $totalDevices * 100, 1) : 0,
+                    'today_devices' => intval($stats['today'] ?? 0),
+                    'this_month_devices' => intval($stats['this_month'] ?? 0),
+                ]
+            ]
+        ]);
+        exit;
+    }
+
+    // 创建设备 (POST /api/admin/v1/devices)
+    if ($path === 'admin/v1/devices' && $method === 'POST') {
+        $db = getDB(); // 使用YTB自己的数据库
+
+        $device_number = trim($input['device_number'] ?? '');
+        $board_code = trim($input['board_code'] ?? '');
+        $imei = trim($input['imei'] ?? '');
+        $iccid = trim($input['iccid'] ?? '');
+        $module_code = trim($input['module_code'] ?? '');
+        $device_type = trim($input['device_type'] ?? '净水器');
+        $brand = trim($input['brand'] ?? '');
+        $device_model = trim($input['device_model'] ?? '');
+        $dealer_id = intval($input['dealer_id'] ?? 0) ?: null;
+        $billing_mode = trim($input['billing_mode'] ?? 'flow');
+        $client_name = trim($input['client_name'] ?? '');
+        $client_phone = trim($input['client_phone'] ?? '');
+        $address = trim($input['address'] ?? '');
+
+        if (empty($device_number)) {
+            echo json_encode(['code' => 1, 'message' => '请输入设备编号']);
+            exit;
+        }
+        if (empty($imei)) {
+            echo json_encode(['code' => 1, 'message' => '请输入IMEI']);
+            exit;
+        }
+
+        // 检查设备编号是否已存在
+        $checkStmt = $db->prepare("SELECT id FROM ytb_devices WHERE device_number = ?");
+        $checkStmt->execute([$device_number]);
+        if ($checkStmt->fetch()) {
+            echo json_encode(['code' => 1, 'message' => '设备编号已存在']);
+            exit;
+        }
+
+        // 检查IMEI是否已存在
+        $checkStmt = $db->prepare("SELECT id FROM ytb_devices WHERE imei = ?");
+        $checkStmt->execute([$imei]);
+        if ($checkStmt->fetch()) {
+            echo json_encode(['code' => 1, 'message' => 'IMEI已存在']);
+            exit;
+        }
+
+        try {
+            $insertSql = "INSERT INTO ytb_devices (device_number, board_code, imei, iccid, module_code, device_type, brand, device_model, dealer_id, billing_mode, status, network_status, client_name, client_phone, client_address, create_date)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '0', ?, ?, ?, NOW())";
+            $stmt = $db->prepare($insertSql);
+            $stmt->execute([$device_number, $board_code ?: $device_number, $imei, $iccid, $module_code, $device_type, $brand, $device_model, $dealer_id, $billing_mode, $client_name, $client_phone, $address]);
+
+            $device_id = $db->lastInsertId();
+
+            echo json_encode(['code' => 0, 'message' => '设备添加成功', 'data' => ['id' => $device_id]]);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 1, 'message' => '添加失败: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // 删除设备 (DELETE /api/admin/v1/devices/:id)
+    if (preg_match('#^admin/v1/devices/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        $db = getDB(); // 使用YTB自己的数据库
+
+        $deviceId = intval($matches[1]);
+
+        try {
+            // 删除设备
+            $deleteStmt = $db->prepare("DELETE FROM ytb_devices WHERE id = ?");
+            $deleteStmt->execute([$deviceId]);
+
+            echo json_encode(['code' => 0, 'message' => '删除成功']);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 1, 'message' => '删除失败: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // 注册IOT (POST /api/admin/v1/devices/:id/register-iot)
+    if (preg_match('#^admin/v1/devices/(\d+)/register-iot$#', $path, $matches) && $method === 'POST') {
+        $db = getDB();
+        $deviceId = intval($matches[1]);
+
+        try {
+            // 检查设备是否存在
+            $stmt = $db->prepare("SELECT * FROM ytb_devices WHERE id = ?");
+            $stmt->execute([$deviceId]);
+            $device = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$device) {
+                echo json_encode(['code' => 1, 'message' => '设备不存在']);
+                exit;
+            }
+
+            // 模拟IOT注册 - 更新设备状态
+            $updateStmt = $db->prepare("UPDATE ytb_devices SET status = 'activated', activate_date = NOW() WHERE id = ?");
+            $updateStmt->execute([$deviceId]);
+
+            echo json_encode(['code' => 0, 'message' => 'IOT注册成功']);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 1, 'message' => '注册失败: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // 修改IMEI (PUT /api/admin/v1/devices/:id/imei)
+    if (preg_match('#^admin/v1/devices/(\d+)/imei$#', $path, $matches) && $method === 'PUT') {
+        $db = getDB();
+        $deviceId = intval($matches[1]);
+        $newImei = trim($input['imei'] ?? '');
+
+        if (empty($newImei)) {
+            echo json_encode(['code' => 1, 'message' => '请输入新IMEI']);
+            exit;
+        }
+
+        try {
+            // 检查设备是否存在
+            $stmt = $db->prepare("SELECT id FROM ytb_devices WHERE id = ?");
+            $stmt->execute([$deviceId]);
+            if (!$stmt->fetch()) {
+                echo json_encode(['code' => 1, 'message' => '设备不存在']);
+                exit;
+            }
+
+            // 检查新IMEI是否已被其他设备使用
+            $checkStmt = $db->prepare("SELECT id FROM ytb_devices WHERE imei = ? AND id != ?");
+            $checkStmt->execute([$newImei, $deviceId]);
+            if ($checkStmt->fetch()) {
+                echo json_encode(['code' => 1, 'message' => '该IMEI已被其他设备使用']);
+                exit;
+            }
+
+            // 更新IMEI
+            $updateStmt = $db->prepare("UPDATE ytb_devices SET imei = ? WHERE id = ?");
+            $updateStmt->execute([$newImei, $deviceId]);
+
+            echo json_encode(['code' => 0, 'message' => 'IMEI修改成功']);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 1, 'message' => '修改失败: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // 同步IOT (POST /api/admin/v1/devices/:id/sync-iot)
+    if (preg_match('#^admin/v1/devices/(\d+)/sync-iot$#', $path, $matches) && $method === 'POST') {
+        $db = getDB();
+        $deviceId = intval($matches[1]);
+
+        try {
+            // 检查设备是否存在
+            $stmt = $db->prepare("SELECT * FROM ytb_devices WHERE id = ?");
+            $stmt->execute([$deviceId]);
+            $device = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$device) {
+                echo json_encode(['code' => 1, 'message' => '设备不存在']);
+                exit;
+            }
+
+            // 模拟从IOT平台同步数据 - 这里可以后续接入真实IOT API
+            // 暂时只更新最后同步时间
+            echo json_encode(['code' => 0, 'message' => 'IOT数据同步成功', 'data' => [
+                'device_number' => $device['device_number'],
+                'imei' => $device['imei'],
+                'synced_at' => date('Y-m-d H:i:s'),
+            ]]);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 1, 'message' => '同步失败: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // 批量文本导入 (POST /api/admin/v1/devices/batch-text)
+    if ($path === 'admin/v1/devices/batch-text' && $method === 'POST') {
+        $db = getDB();
+        $devicesData = $input['devices'] ?? [];
+
+        if (empty($devicesData) || !is_array($devicesData)) {
+            echo json_encode(['code' => 1, 'message' => '请提供设备数据']);
+            exit;
+        }
+
+        $successCount = 0;
+        $failCount = 0;
+        $errors = [];
+
+        foreach ($devicesData as $index => $device) {
+            $device_number = trim($device['device_number'] ?? '');
+            $imei = trim($device['imei'] ?? '');
+
+            if (empty($device_number) || empty($imei)) {
+                $failCount++;
+                $errors[] = "第{$index}行: 设备编号或IMEI不能为空";
+                continue;
+            }
+
+            try {
+                // 检查是否已存在
+                $checkStmt = $db->prepare("SELECT id FROM ytb_devices WHERE device_number = ? OR imei = ?");
+                $checkStmt->execute([$device_number, $imei]);
+                if ($checkStmt->fetch()) {
+                    $failCount++;
+                    $errors[] = "第{$index}行: 设备{$device_number}已存在";
+                    continue;
+                }
+
+                $board_code = trim($device['board_code'] ?? '') ?: $device_number;
+                $iccid = trim($device['iccid'] ?? '');
+                $module_code = trim($device['module_code'] ?? '');
+                $brand = trim($device['brand'] ?? '');
+                $device_model = trim($device['device_model'] ?? '');
+
+                $insertSql = "INSERT INTO ytb_devices (device_number, board_code, imei, iccid, module_code, device_type, brand, device_model, billing_mode, status, network_status, create_date)
+                              VALUES (?, ?, ?, ?, ?, '净水器', ?, ?, 'flow', 'pending', '0', NOW())";
+                $stmt = $db->prepare($insertSql);
+                $stmt->execute([$device_number, $board_code, $imei, $iccid, $module_code, $brand, $device_model]);
+
+                $successCount++;
+            } catch (Exception $e) {
+                $failCount++;
+                $errors[] = "第{$index}行: " . $e->getMessage();
+            }
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => "导入完成: 成功{$successCount}条, 失败{$failCount}条",
+            'data' => [
+                'success_count' => $successCount,
+                'fail_count' => $failCount,
+                'errors' => $errors,
+            ]
+        ]);
+        exit;
+    }
+
+    // 获取经销商列表 (GET /api/admin/v1/dealers)
+    if ($path === 'admin/v1/dealers' && $method === 'GET') {
+        $tappDb = getTappDB();
+        if (!$tappDb) {
+            echo json_encode(['code' => 0, 'data' => []]);
+            exit;
+        }
+
+        try {
+            $stmt = $tappDb->query("SELECT id, dealer_name, dealer_number, contact_person, contact_phone, create_date FROM water_dealers ORDER BY id DESC");
+            $dealers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            echo json_encode(['code' => 0, 'data' => $dealers]);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 0, 'data' => [], 'message' => $e->getMessage()]);
+        }
         exit;
     }
 

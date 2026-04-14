@@ -829,13 +829,25 @@ const routesConfig = [
                 name: 'DeviceManagement',
                 component: () => import('../views/devices/DeviceLayout.vue'),
                 meta: { title: '净水器', icon: 'Tools' },
-                redirect: { name: 'HQDevices' },
+                redirect: { name: 'DeviceStockIn' },
                 children: [
                     {
                         path: 'hq-devices',
                         name: 'HQDevices',
                         component: () => import('../views/devices/List.vue'),
                         meta: { title: '点点够设备', icon: 'monitor' }
+                    },
+                    {
+                        path: 'list',
+                        name: 'DevicesList',
+                        component: () => import('../views/devices/YtbDevices.vue'),
+                        meta: { title: '设备列表', icon: 'Monitor' }
+                    },
+                    {
+                        path: 'stock-in',
+                        name: 'DeviceStockIn',
+                        component: () => import('../views/devices/StockIn.vue'),
+                        meta: { title: '设备入库', icon: 'Box' }
                     },
                     {
                         path: 'installation',

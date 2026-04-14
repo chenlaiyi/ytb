@@ -4,7 +4,7 @@ import path from 'path';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
-    const base = env.VITE_ADMIN_BASE_URL || '/admin/';
+    const base = env.VITE_ADMIN_BASE_URL || '/';
 
     return {
         base,
