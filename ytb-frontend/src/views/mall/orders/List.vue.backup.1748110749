@@ -1,0 +1,573 @@
+<template>
+  <div class="app-container">
+    <div class="filter-container">
+      <el-input
+        v-model="listQuery.keyword"
+        placeholder="订单号/用户名"
+        style="width: 200px;"
+        class="filter-item"
+        @keyup.enter="handleFilter"
+      />
+      <el-select
+        v-model="listQuery.status"
+        placeholder="订单状态"
+        clearable
+        style="width: 120px"
+        class="filter-item"
+      >
+        <el-option
+          v-for="item in statusOptions"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
+      </el-select>
+      <el-date-picker
+        v-model="dateRange"
+        type="daterange"
+        range-separator="至"
+        start-placeholder="开始日期"
+        end-placeholder="结束日期"
+        value-format="YYYY-MM-DD"
+        class="filter-item date-picker"
+        @change="handleDateRangeChange"
+      />
+      <el-button class="filter-item" type="primary" icon="Search" @click="handleFilter">
+        搜索
+      </el-button>
+      <el-button class="filter-item" type="success" icon="Download" @click="handleExport">
+        导出
+      </el-button>
+    </div>
+
+    <el-table
+      v-loading="listLoading"
+      :data="list"
+      element-loading-text="加载中..."
+      border
+      fit
+      highlight-current-row
+      style="width: 100%;"
+    >
+      <el-table-column prop="id" label="ID" width="80" align="center" />
+      <el-table-column prop="order_no" label="订单号" width="180" />
+      <el-table-column prop="user_name" label="用户" width="120" />
+      <el-table-column label="金额" width="120" align="center">
+        <template #default="scope">
+          ¥{{ scope.row.total_amount }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="payment_method" label="支付方式" width="120" align="center" />
+      <el-table-column label="状态" width="100" align="center">
+        <template #default="scope">
+          <el-tag :type="getOrderStatusType(scope.row.status)">
+            {{ getOrderStatusText(scope.row.status) }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="created_at" label="创建时间" width="180" />
+      <el-table-column label="操作" width="250" align="center">
+        <template #default="scope">
+          <el-button type="primary" size="small" @click="handleDetail(scope.row)">
+            详情
+          </el-button>
+          <el-button 
+            v-if="scope.row.status === 'pending'" 
+            type="success" 
+            size="small" 
+            @click="handleProcess(scope.row, 'processing')"
+          >
+            处理
+          </el-button>
+          <el-button 
+            v-if="scope.row.status === 'processing'" 
+            type="success" 
+            size="small" 
+            @click="handleProcess(scope.row, 'completed')"
+          >
+            完成
+          </el-button>
+          <el-button 
+            v-if="['pending', 'processing'].includes(scope.row.status)" 
+            type="danger" 
+            size="small" 
+            @click="handleProcess(scope.row, 'cancelled')"
+          >
+            取消
+          </el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-pagination
+      v-if="total > 0"
+      :current-page="listQuery.page"
+      :page-sizes="[10, 20, 30, 50]"
+      :page-size="listQuery.limit"
+      layout="total, sizes, prev, pager, next, jumper"
+      :total="total"
+      @size-change="handleSizeChange"
+      @current-change="handleCurrentChange"
+      class="pagination-container"
+    />
+    
+    <!-- 订单详情弹窗 -->
+    <el-dialog
+      title="订单详情"
+      v-model="dialogVisible"
+      width="60%"
+    >
+      <div v-if="currentOrder" class="order-detail">
+        <h3 class="section-title">订单基本信息</h3>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="订单号">{{ currentOrder.order_no }}</el-descriptions-item>
+          <el-descriptions-item label="订单状态">
+            <el-tag :type="getOrderStatusType(currentOrder.status)">
+              {{ getOrderStatusText(currentOrder.status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="用户名">{{ currentOrder.user_name }}</el-descriptions-item>
+          <el-descriptions-item label="下单时间">{{ currentOrder.created_at }}</el-descriptions-item>
+          <el-descriptions-item label="订单金额">¥{{ currentOrder.total_amount }}</el-descriptions-item>
+          <el-descriptions-item label="支付方式">{{ currentOrder.payment_method }}</el-descriptions-item>
+          <el-descriptions-item label="支付时间" :span="2">
+            {{ currentOrder.payment_time || '未支付' }}
+          </el-descriptions-item>
+        </el-descriptions>
+        
+        <h3 class="section-title">收货信息</h3>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="收货人">{{ currentOrder.shipping_name }}</el-descriptions-item>
+          <el-descriptions-item label="联系电话">{{ currentOrder.shipping_phone }}</el-descriptions-item>
+          <el-descriptions-item label="收货地址">{{ currentOrder.shipping_address }}</el-descriptions-item>
+          <el-descriptions-item label="备注信息">{{ currentOrder.remark || '无' }}</el-descriptions-item>
+        </el-descriptions>
+        
+        <h3 class="section-title">订单商品</h3>
+        <el-table :data="currentOrder.products" border style="width: 100%">
+          <el-table-column label="商品图片" width="100" align="center">
+            <template #default="scope">
+              <el-image
+                v-if="scope.row.image"
+                style="width: 60px; height: 60px"
+                :src="scope.row.image"
+                :preview-src-list="[scope.row.image]"
+                fit="cover"
+              />
+              <span v-else>无图片</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="name" label="商品名称" min-width="150" />
+          <el-table-column prop="product_no" label="商品编号" width="120" />
+          <el-table-column label="单价" width="100" align="center">
+            <template #default="scope">
+              ¥{{ scope.row.price }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="quantity" label="数量" width="80" align="center" />
+          <el-table-column label="小计" width="100" align="center">
+            <template #default="scope">
+              ¥{{ (scope.row.price * scope.row.quantity).toFixed(2) }}
+            </template>
+          </el-table-column>
+        </el-table>
+        
+        <h3 class="section-title">订单操作记录</h3>
+        <el-timeline>
+          <el-timeline-item
+            v-for="(activity, index) in currentOrder.logs"
+            :key="index"
+            :type="getLogType(activity.action)"
+            :timestamp="activity.created_at"
+          >
+            {{ activity.description }}
+          </el-timeline-item>
+        </el-timeline>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="dialogVisible = false">关闭</el-button>
+          <el-button 
+            v-if="currentOrder && currentOrder.status === 'pending'" 
+            type="success" 
+            @click="handleProcess(currentOrder, 'processing')"
+          >
+            处理订单
+          </el-button>
+          <el-button 
+            v-if="currentOrder && currentOrder.status === 'processing'" 
+            type="success" 
+            @click="handleProcess(currentOrder, 'completed')"
+          >
+            完成订单
+          </el-button>
+          <el-button 
+            v-if="currentOrder && ['pending', 'processing'].includes(currentOrder.status)" 
+            type="danger" 
+            @click="handleProcess(currentOrder, 'cancelled')"
+          >
+            取消订单
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script>
+import { ref, reactive, onMounted } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import * as orderApi from '../../../api/order';
+
+export default {
+  name: 'OrderList',
+  setup() {
+    const listLoading = ref(true);
+    const list = ref([]);
+    const total = ref(0);
+    const dateRange = ref([]);
+    const listQuery = reactive({
+      page: 1,
+      limit: 10,
+      keyword: '',
+      status: undefined,
+      start_date: undefined,
+      end_date: undefined
+    });
+    
+    const statusOptions = [
+      { label: '待付款', value: 1 },
+      { label: '待发货', value: 2 },
+      { label: '已发货', value: 3 },
+      { label: '已完成', value: 4 },
+      { label: '申请退款', value: 5 },
+      { label: '退款完成', value: 6 },
+      { label: '已取消', value: 7 }
+    ];
+    
+    const dialogVisible = ref(false);
+    const currentOrder = ref(null);
+    
+    // 获取订单列表
+    const fetchData = () => {
+      listLoading.value = true;
+      
+      orderApi.getOrders(listQuery)
+        .then(response => {
+          if (response.data.code === 0) {
+            list.value = response.data.data;
+            total.value = response.data.total;
+          } else {
+            ElMessage.error(response.data.message || '获取订单列表失败');
+          }
+        })
+        .catch(error => {
+          console.error('获取订单列表失败:', error);
+          ElMessage.error('获取订单列表失败');
+        })
+        .finally(() => {
+          listLoading.value = false;
+        });
+    };
+    
+    // 日期范围改变
+    const handleDateRangeChange = (val) => {
+      if (val) {
+        listQuery.start_date = val[0];
+        listQuery.end_date = val[1];
+      } else {
+        listQuery.start_date = undefined;
+        listQuery.end_date = undefined;
+      }
+    };
+    
+    // 搜索订单
+    const handleFilter = () => {
+      listQuery.page = 1;
+      fetchData();
+    };
+    
+    // 改变每页显示数量
+    const handleSizeChange = (val) => {
+      listQuery.limit = val;
+      fetchData();
+    };
+    
+    // 改变页码
+    const handleCurrentChange = (val) => {
+      listQuery.page = val;
+      fetchData();
+    };
+    
+    // 导出订单
+    const handleExport = () => {
+      orderApi.exportOrders(listQuery)
+        .then(response => {
+          if (response.data.code === 0) {
+            // 这里需要根据后端返回的数据格式处理导出逻辑
+            // 可以使用第三方库如xlsx.js来生成Excel文件
+            ElMessage.success('订单数据导出成功');
+          } else {
+            ElMessage.error(response.data.message || '导出订单数据失败');
+          }
+        })
+        .catch(error => {
+          console.error('导出订单数据失败:', error);
+          ElMessage.error('导出订单数据失败');
+        });
+    };
+    
+    // 查看订单详情
+    const handleDetail = (row) => {
+      orderApi.getOrderDetail(row.id)
+        .then(response => {
+          if (response.data.code === 0) {
+            currentOrder.value = response.data.data;
+            dialogVisible.value = true;
+          } else {
+            ElMessage.error(response.data.message || '获取订单详情失败');
+          }
+        })
+        .catch(error => {
+          console.error('获取订单详情失败:', error);
+          ElMessage.error('获取订单详情失败');
+        });
+    };
+    
+    // 处理订单状态变更
+    const handleProcess = (order, status) => {
+      let actionFn;
+      let confirmMsg = '';
+      
+      if (status === 2) { // 发货
+        confirmMsg = '确认发货该订单吗？';
+        actionFn = () => shipOrder(order.id);
+      } else if (status === 4) { // 确认收货/完成
+        confirmMsg = '确认将订单标记为已完成吗？';
+        actionFn = () => confirmOrder(order.id);
+      } else if (status === 7) { // 取消
+        confirmMsg = '确认取消该订单吗？这将会自动退款！';
+        actionFn = () => cancelOrder(order.id);
+      } else {
+        ElMessage.warning('不支持的操作');
+        return;
+      }
+      
+      ElMessageBox.confirm(
+        confirmMsg,
+        '提示',
+        {
+          confirmButtonText: '确认',
+          cancelButtonText: '取消',
+          type: status === 7 ? 'warning' : 'info'
+        }
+      ).then(() => {
+        actionFn();
+      });
+    };
+    
+    // 发货
+    const shipOrder = (id) => {
+      // 弹出发货信息填写表单
+      ElMessageBox.prompt(
+        '请输入物流单号',
+        '发货信息',
+        {
+          confirmButtonText: '确认',
+          cancelButtonText: '取消',
+          inputPlaceholder: '请输入物流单号'
+        }
+      ).then(({ value }) => {
+        if (!value) {
+          ElMessage.warning('物流单号不能为空');
+          return;
+        }
+        
+        const shipData = {
+          ship_area_name: '物流公司', // 这里可以改为物流公司选择器
+          ship_area_id: value
+        };
+        
+        orderApi.shipOrder(id, shipData)
+          .then(response => {
+            if (response.data.code === 0) {
+              ElMessage.success('订单发货成功');
+              fetchData();
+              if (dialogVisible.value && currentOrder.value && currentOrder.value.id === id) {
+                orderApi.getOrderDetail(id).then(resp => {
+                  if (resp.data.code === 0) {
+                    currentOrder.value = resp.data.data;
+                  }
+                });
+              }
+            } else {
+              ElMessage.error(response.data.message || '订单发货失败');
+            }
+          })
+          .catch(error => {
+            console.error('订单发货失败:', error);
+            ElMessage.error('订单发货失败');
+          });
+      });
+    };
+    
+    // 确认订单
+    const confirmOrder = (id) => {
+      orderApi.confirmOrder(id)
+        .then(response => {
+          if (response.data.code === 0) {
+            ElMessage.success('订单确认完成成功');
+            fetchData();
+            if (dialogVisible.value && currentOrder.value && currentOrder.value.id === id) {
+              orderApi.getOrderDetail(id).then(resp => {
+                if (resp.data.code === 0) {
+                  currentOrder.value = resp.data.data;
+                }
+              });
+            }
+          } else {
+            ElMessage.error(response.data.message || '订单确认完成失败');
+          }
+        })
+        .catch(error => {
+          console.error('订单确认完成失败:', error);
+          ElMessage.error('订单确认完成失败');
+        });
+    };
+    
+    // 取消订单
+    const cancelOrder = (id) => {
+      orderApi.cancelOrder(id)
+        .then(response => {
+          if (response.data.code === 0) {
+            ElMessage.success('订单取消成功');
+            fetchData();
+            if (dialogVisible.value && currentOrder.value && currentOrder.value.id === id) {
+              orderApi.getOrderDetail(id).then(resp => {
+                if (resp.data.code === 0) {
+                  currentOrder.value = resp.data.data;
+                }
+              });
+            }
+          } else {
+            ElMessage.error(response.data.message || '订单取消失败');
+          }
+        })
+        .catch(error => {
+          console.error('订单取消失败:', error);
+          ElMessage.error('订单取消失败');
+        });
+    };
+    
+    // 获取订单状态类型
+    const getOrderStatusType = (status) => {
+      const statusMap = {
+        1: 'warning',  // 待付款
+        2: 'primary',  // 待发货
+        3: 'info',     // 已发货
+        4: 'success',  // 已完成
+        5: 'danger',   // 申请退款
+        6: 'info',     // 退款完成
+        7: 'danger'    // 已取消
+      };
+      return statusMap[status] || 'info';
+    };
+    
+    // 获取订单状态文本
+    const getOrderStatusText = (status) => {
+      const statusMap = {
+        1: '待付款',
+        2: '待发货',
+        3: '已发货',
+        4: '已完成',
+        5: '申请退款',
+        6: '退款完成',
+        7: '已取消'
+      };
+      return statusMap[status] || '未知状态';
+    };
+    
+    // 获取日志类型
+    const getLogType = (action) => {
+      const typeMap = {
+        create: 'primary',
+        payment: 'success',
+        process: 'warning',
+        complete: 'success',
+        cancel: 'danger',
+        refund: 'info'
+      };
+      return typeMap[action] || 'info';
+    };
+    
+    onMounted(() => {
+      fetchData();
+    });
+    
+    return {
+      listLoading,
+      list,
+      total,
+      dateRange,
+      listQuery,
+      statusOptions,
+      dialogVisible,
+      currentOrder,
+      handleDateRangeChange,
+      handleFilter,
+      handleSizeChange,
+      handleCurrentChange,
+      handleExport,
+      handleDetail,
+      handleProcess,
+      getOrderStatusType,
+      getOrderStatusText,
+      getLogType
+    };
+  }
+};
+</script>
+
+<style scoped>
+.filter-container {
+  padding-bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-item {
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.date-picker {
+  width: 360px;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.section-title {
+  margin: 20px 0 10px;
+  font-size: 16px;
+  font-weight: bold;
+  color: #303133;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #EBEEF5;
+}
+
+.order-detail {
+  padding: 0 10px;
+}
+
+:deep(.el-descriptions) {
+  margin-bottom: 20px;
+}
+
+:deep(.el-timeline) {
+  padding-left: 20px;
+}
+</style> 

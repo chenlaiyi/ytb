@@ -1,0 +1,323 @@
+<template>
+  <div class="page-container">
+    <el-card class="page-card">
+      <div class="page-header">
+        <h2>交易记录管理</h2>
+        <p class="page-description">查看和管理系统中的所有交易记录</p>
+      </div>
+      
+      <div class="filter-container">
+        <el-form :inline="true" :model="listQuery" class="form-inline">
+          <el-form-item label="搜索">
+            <el-input
+              v-model="listQuery.keyword"
+              placeholder="订单号/交易号"
+              clearable
+              @keyup.enter.native="handleFilter"
+            />
+          </el-form-item>
+          
+          <el-form-item label="支付方式">
+            <el-select v-model="listQuery.payment_method" placeholder="全部" clearable>
+              <el-option label="微信支付" value="wechat" />
+              <el-option label="支付宝" value="alipay" />
+              <el-option label="余额支付" value="balance" />
+            </el-select>
+          </el-form-item>
+          
+          <el-form-item label="交易时间">
+            <el-date-picker
+              v-model="dateRange"
+              type="daterange"
+              align="right"
+              unlink-panels
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              value-format="yyyy-MM-dd"
+              @change="handleDateRangeChange"
+            />
+          </el-form-item>
+          
+          <el-form-item>
+            <el-button type="primary" icon="el-icon-search" @click="handleFilter">搜索</el-button>
+            <el-button icon="el-icon-refresh" @click="resetFilter">重置</el-button>
+            <el-button type="success" icon="el-icon-download" @click="handleExport">导出</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+      
+      <div class="table-container">
+        <el-table
+          v-loading="listLoading"
+          :data="list"
+          border
+          fit
+          highlight-current-row
+          style="width: 100%"
+        >
+          <el-table-column prop="order_no" label="订单号" min-width="180" />
+          <el-table-column prop="transaction_id" label="交易号" min-width="180" />
+          <el-table-column prop="actual_amount" label="交易金额" width="120">
+            <template slot-scope="{row}">
+              <span>¥{{ row.actual_amount }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="payment_method" label="支付方式" width="120">
+            <template slot-scope="{row}">
+              <el-tag v-if="row.payment_method === 'wechat'" type="success">微信支付</el-tag>
+              <el-tag v-else-if="row.payment_method === 'alipay'" type="primary">支付宝</el-tag>
+              <el-tag v-else-if="row.payment_method === 'balance'" type="info">余额支付</el-tag>
+              <el-tag v-else>{{ row.payment_method }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="user_name" label="用户" width="150" />
+          <el-table-column prop="paid_at" label="支付时间" width="180" />
+        </el-table>
+        
+        <div class="pagination-container">
+          <el-pagination
+            background
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
+            :current-page.sync="listQuery.page"
+            :page-sizes="[10, 20, 30, 50]"
+            :page-size="listQuery.limit"
+            layout="total, sizes, prev, pager, next, jumper"
+            :total="total"
+          />
+        </div>
+      </div>
+      
+      <!-- 交易概览统计 -->
+      <el-card class="box-card statistics-card" v-if="statsVisible">
+        <div slot="header" class="card-header">
+          <span>交易概览</span>
+          <el-button
+            style="float: right; padding: 3px 0"
+            type="text"
+            icon="el-icon-refresh"
+            @click="getStatistics"
+          >刷新</el-button>
+        </div>
+        <div class="stats-container" v-loading="statsLoading">
+          <div class="stats-item">
+            <div class="stats-label">总交易金额</div>
+            <div class="stats-value">¥{{ stats.total_amount || 0 }}</div>
+          </div>
+          <div class="stats-item">
+            <div class="stats-label">总交易笔数</div>
+            <div class="stats-value">{{ stats.total_count || 0 }}</div>
+          </div>
+        </div>
+      </el-card>
+    </el-card>
+  </div>
+</template>
+
+<script>
+export default {
+  name: 'PaymentTransactions',
+  data() {
+    return {
+      list: [],
+      total: 0,
+      listLoading: true,
+      listQuery: {
+        page: 1,
+        limit: 20,
+        keyword: '',
+        payment_method: '',
+        start_date: '',
+        end_date: ''
+      },
+      dateRange: [],
+      statsVisible: true,
+      statsLoading: false,
+      stats: {
+        total_amount: 0,
+        total_count: 0
+      }
+    }
+  },
+  created() {
+    this.getList()
+    this.getStatistics()
+  },
+  methods: {
+    getList() {
+      this.listLoading = true
+      this.$http.get('/api/payment/transactions', { params: this.listQuery })
+        .then(response => {
+          if (response.code === 0) {
+            this.list = response.data
+            this.total = response.data.total
+          } else {
+            this.$message.error(response.data.message || '获取交易记录失败')
+          }
+          this.listLoading = false
+        })
+        .catch(error => {
+          console.error('获取交易记录失败', error)
+          this.$message.error('获取交易记录失败')
+          this.listLoading = false
+        })
+    },
+    getStatistics() {
+      this.statsLoading = true
+      this.$http.get('/api/payment/transactions/statistics', {
+        params: {
+          start_date: this.listQuery.start_date,
+          end_date: this.listQuery.end_date
+        }
+      })
+        .then(response => {
+          if (response.code === 0) {
+            const data = response.data || {}
+            this.stats = data.overview || {
+              total_amount: 0,
+              total_count: 0
+            }
+          } else {
+            this.$message.error(response.data.message || '获取统计数据失败')
+          }
+          this.statsLoading = false
+        })
+        .catch(error => {
+          console.error('获取统计数据失败', error)
+          this.$message.error('获取统计数据失败')
+          this.statsLoading = false
+        })
+    },
+    handleFilter() {
+      this.listQuery.page = 1
+      this.getList()
+      this.getStatistics()
+    },
+    resetFilter() {
+      this.listQuery = {
+        page: 1,
+        limit: 20,
+        keyword: '',
+        payment_method: '',
+        start_date: '',
+        end_date: ''
+      }
+      this.dateRange = []
+      this.getList()
+      this.getStatistics()
+    },
+    handleSizeChange(val) {
+      this.listQuery.limit = val
+      this.getList()
+    },
+    handleCurrentChange(val) {
+      this.listQuery.page = val
+      this.getList()
+    },
+    handleDateRangeChange(dates) {
+      if (dates) {
+        this.listQuery.start_date = dates[0]
+        this.listQuery.end_date = dates[1]
+      } else {
+        this.listQuery.start_date = ''
+        this.listQuery.end_date = ''
+      }
+    },
+    handleExport() {
+      this.$http.get('/api/payment/transactions/export', { params: this.listQuery })
+        .then(response => {
+          if (response.code === 0) {
+            const data = response.data || []
+            this.exportToCsv(data)
+          } else {
+            this.$message.error(response.data.message || '导出交易记录失败')
+          }
+        })
+        .catch(error => {
+          console.error('导出交易记录失败', error)
+          this.$message.error('导出交易记录失败')
+        })
+    },
+    exportToCsv(data) {
+      if (!data.length) {
+        this.$message.warning('没有可导出的数据')
+        return
+      }
+      
+      // 获取CSV表头
+      const headers = Object.keys(data[0])
+      
+      // 生成CSV内容
+      let csvContent = headers.join(',') + '\n'
+      
+      data.forEach(row => {
+        const values = headers.map(header => {
+          const value = row[header] || ''
+          // 处理包含逗号或引号的字段
+          return `"${value.toString().replace(/"/g, '""')}"`
+        })
+        csvContent += values.join(',') + '\n'
+      })
+      
+      // 创建下载链接
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.setAttribute('href', url)
+      link.setAttribute('download', `交易记录_${new Date().toISOString().slice(0, 10)}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    },
+    goBack() {
+      this.$router.go(-1)
+    }
+  }
+}
+</script>
+
+<style scoped>
+.page-container {
+  padding: 20px;
+}
+.page-card {
+  margin-bottom: 20px;
+}
+.page-header {
+  margin-bottom: 20px;
+}
+.page-description {
+  color: #666;
+  margin: 10px 0;
+}
+.filter-container {
+  margin-bottom: 20px;
+}
+.pagination-container {
+  margin-top: 20px;
+  text-align: right;
+}
+.statistics-card {
+  margin-top: 20px;
+}
+.stats-container {
+  display: flex;
+  justify-content: space-around;
+  flex-wrap: wrap;
+}
+.stats-item {
+  text-align: center;
+  padding: 10px 20px;
+}
+.stats-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 5px;
+}
+.stats-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #409EFF;
+}
+</style> 

@@ -1,0 +1,326 @@
+<template>
+  <div class="login-container">
+    <div class="login-box">
+      <div class="login-header">
+        <h1>点点够管理系统</h1>
+        <p>安全便捷的后台管理平台</p>
+      </div>
+      <el-form
+        ref="loginFormRef"
+        :model="formData"
+        :rules="loginRules"
+        label-width="0"
+        class="login-form"
+        autocomplete="off"
+        @submit.prevent="handleLogin"
+      >
+        <el-form-item prop="username">
+          <el-input
+            v-model="formData.username"
+            placeholder="用户名"
+            :prefix-icon="User"
+            autocomplete="off"
+            size="large"
+          />
+        </el-form-item>
+        <el-form-item prop="password">
+          <el-input
+            v-model="formData.password"
+            type="password"
+            placeholder="密码"
+            :prefix-icon="Lock"
+            autocomplete="new-password"
+            show-password
+            size="large"
+            @keyup.enter="handleLogin"
+          />
+        </el-form-item>
+        <el-form-item v-if="errorMessage" class="error-message-item">
+          <el-alert :title="errorMessage" type="error" show-icon :closable="false" />
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            :loading="loading"
+            type="primary"
+            class="login-button"
+            native-type="submit"
+            size="large"
+            @click="handleLogin"
+          >
+            登 录
+          </el-button>
+        </el-form-item>
+      </el-form>
+      <div class="login-footer">
+        <p>© {{ new Date().getFullYear() }} 点点够管理系统. All Rights Reserved.</p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
+import { User, Lock } from '@element-plus/icons-vue';
+import axios from 'axios';
+import { clearAuth, setToken, setUser } from '@/utils/auth';
+
+const router = useRouter();
+const loginFormRef = ref(null);
+const loading = ref(false);
+const errorMessage = ref('');
+
+const formData = reactive({
+  username: '',
+  password: ''
+});
+
+const loginRules = reactive({
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+});
+
+// 清理旧的认证信息
+onMounted(() => {
+  clearAuth();
+  // 获取CSRF令牌
+  getCsrfToken();
+});
+
+// 获取CSRF令牌
+const getCsrfToken = async () => {
+  try {
+    // 尝试从cookie中获取CSRF令牌
+    const token = document.cookie.split(';')
+      .find(cookie => cookie.trim().startsWith('XSRF-TOKEN='));
+    
+    if (!token) {
+      // 如果没有令牌，请求一个新的
+      await axios.get('/sanctum/csrf-cookie');
+      console.log('已获取新的CSRF令牌');
+    } else {
+      console.log('已从Cookie中获取CSRF令牌');
+    }
+  } catch (error) {
+    console.error('获取CSRF令牌失败:', error);
+  }
+};
+
+const handleLogin = async () => {
+  if (!loginFormRef.value) return;
+  
+  await loginFormRef.value.validate(async (valid) => {
+    if (!valid) {
+      console.log('表单验证失败');
+      return false;
+    }
+    
+    loading.value = true;
+    errorMessage.value = '';
+    
+    try {
+      // 获取CSRF令牌
+      await getCsrfToken();
+      
+      // 准备请求头
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      };
+      
+      // 从cookie中获取CSRF令牌
+      const csrfToken = document.cookie
+        .split(';')
+        .find(cookie => cookie.trim().startsWith('XSRF-TOKEN='));
+      
+      if (csrfToken) {
+        const tokenValue = decodeURIComponent(csrfToken.split('=')[1]);
+        headers['X-XSRF-TOKEN'] = tokenValue;
+      }
+      
+      console.log('发送登录请求...');
+      
+      // 发送登录请求
+      const response = await axios.post('/api/admin/login', formData, {
+        headers,
+        withCredentials: true
+      });
+      
+      console.log('登录响应:', response);
+      
+      const { data } = response;
+      
+      if (data.code === 0 && data.data && data.data.token) {
+        // 保存认证信息
+        setToken(data.data.token);
+        setUser(data.data.user);
+        
+        ElMessage.success('登录成功');
+        router.push({ path: '/' });
+      } else if (data.token) {
+        // 兼容不同的API响应格式
+        setToken(data.token);
+        if (data.user) {
+          setUser(data.user);
+        }
+        
+        ElMessage.success('登录成功');
+        router.push({ path: '/' });
+      } else {
+        errorMessage.value = data.message || '登录失败，请检查用户名和密码';
+        ElMessage.error(errorMessage.value);
+      }
+    } catch (error) {
+      console.error('登录失败:', error);
+      
+      if (error.response) {
+        const { status, data } = error.response;
+        
+        if (status === 401) {
+          errorMessage.value = data.message || '用户名或密码错误';
+        } else if (status === 419) {
+          errorMessage.value = 'CSRF令牌已过期，请刷新页面后重试';
+        } else if (status === 422) {
+          errorMessage.value = data.message || '输入信息有误';
+        } else if (status === 403) {
+          errorMessage.value = data.message || '无权访问';
+        } else {
+          errorMessage.value = data.message || `服务器错误 (${status})`;
+        }
+      } else if (error.request) {
+        errorMessage.value = '网络错误，无法连接到服务器';
+      } else {
+        errorMessage.value = error.message || '登录过程中发生未知错误';
+      }
+      
+      ElMessage.error(errorMessage.value);
+    } finally {
+      loading.value = false;
+    }
+  });
+};
+</script>
+
+<style lang="scss" scoped>
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0f2f5 0%, #d9e1e8 100%);
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.login-box {
+  width: 100%;
+  max-width: 400px;
+  padding: 40px 35px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  z-index: 2;
+  animation: fadeIn 0.6s ease-out forwards;
+  border: 1px solid #e4e7ed;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(25px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 30px;
+
+  h1 {
+    font-size: 24px;
+    color: #303133;
+    margin: 0 0 10px 0;
+    font-weight: 600;
+  }
+
+  p {
+    color: #606266;
+    margin: 0;
+    font-size: 14px;
+  }
+}
+
+.login-form {
+  .el-form-item {
+    margin-bottom: 22px;
+  }
+
+  .el-input {
+     :deep(.el-input__wrapper) {
+       padding: 1px 11px;
+     }
+     :deep(.el-input__prefix) {
+       display: flex;
+       align-items: center;
+       margin-right: 5px;
+       color: #a8abb2;
+     }
+     :deep(.el-input__inner) {
+        height: 40px;
+     }
+     :deep(.el-input-group__append), :deep(.el-input-group__prepend) {
+        padding: 0 15px;
+     }
+  }
+
+  .login-button {
+    width: 100%;
+    font-size: 16px;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(var(--el-color-primary-rgb), 0.2);
+    }
+  }
+
+  .error-message-item {
+      margin-bottom: 15px;
+      :deep(.el-alert) {
+          padding: 8px 12px;
+          border-radius: 4px;
+      }
+      :deep(.el-alert__title) {
+         font-size: 13px;
+      }
+      :deep(.el-alert__icon) {
+         width: 16px;
+         margin-right: 8px;
+      }
+  }
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 35px;
+  font-size: 12px;
+  color: #a8abb2;
+}
+
+@media (max-width: 480px) {
+  .login-box {
+    padding: 35px 25px;
+    border: none;
+    box-shadow: none;
+  }
+  .login-header h1 {
+      font-size: 22px;
+  }
+}
+</style>

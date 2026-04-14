@@ -1,0 +1,789 @@
+<template>
+  <div class="installation-statistics-page">
+    <el-card class="box-card">
+      <template #header>
+        <div class="card-header">
+          <span>安装统计分析</span>
+          <div class="header-buttons">
+            <el-button type="primary" @click="exportData">导出数据</el-button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 筛选条件 -->
+      <div class="filter-container">
+        <el-form :inline="true" :model="filters" class="demo-form-inline">
+          <el-form-item label="日期范围">
+            <el-date-picker
+              v-model="filters.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              value-format="YYYY-MM-DD"
+              :shortcuts="dateRangeShortcuts"
+              clearable
+            />
+          </el-form-item>
+          <el-form-item label="统计类型">
+            <el-select v-model="filters.type" placeholder="请选择统计类型">
+              <el-option label="按日统计" value="daily" />
+              <el-option label="按周统计" value="weekly" />
+              <el-option label="按月统计" value="monthly" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="工程师">
+            <el-select v-model="filters.engineer_id" placeholder="全部工程师" clearable>
+              <el-option
+                v-for="engineer in engineers"
+                :key="engineer.id"
+                :label="engineer.name"
+                :value="engineer.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleSearch">查询</el-button>
+            <el-button @click="resetFilters">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <!-- 统计卡片 -->
+      <div class="stat-cards">
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-card shadow="hover" class="stat-card">
+              <div class="stat-card-content">
+                <div class="stat-icon">
+                  <el-icon><Calendar /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-title">总预约数</div>
+                  <div class="stat-value">{{ overview.totalBookings }}</div>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" class="stat-card">
+              <div class="stat-card-content">
+                <div class="stat-icon">
+                  <el-icon><CircleCheck /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-title">已完成安装</div>
+                  <div class="stat-value">{{ overview.completedBookings }}</div>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" class="stat-card">
+              <div class="stat-card-content">
+                <div class="stat-icon">
+                  <el-icon><Money /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-title">已支付预约</div>
+                  <div class="stat-value">{{ overview.paidBookings }}</div>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" class="stat-card">
+              <div class="stat-card-content">
+                <div class="stat-icon">
+                  <el-icon><Wallet /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-title">总收入</div>
+                  <div class="stat-value">¥{{ formatCurrency(overview.totalRevenue) }}</div>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+      </div>
+
+      <!-- 图表区域 -->
+      <div class="chart-container">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-card shadow="hover" class="chart-card">
+              <template #header>
+                <div class="chart-header">
+                  <span>预约状态分布</span>
+                </div>
+              </template>
+              <div id="status-chart" class="chart"></div>
+            </el-card>
+          </el-col>
+          <el-col :span="12">
+            <el-card shadow="hover" class="chart-card">
+              <template #header>
+                <div class="chart-header">
+                  <span>工程师排名</span>
+                </div>
+              </template>
+              <div id="engineer-chart" class="chart"></div>
+            </el-card>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20" style="margin-top: 20px;">
+          <el-col :span="24">
+            <el-card shadow="hover" class="chart-card">
+              <template #header>
+                <div class="chart-header">
+                  <span>预约趋势</span>
+                </div>
+              </template>
+              <div id="trend-chart" class="chart"></div>
+            </el-card>
+          </el-col>
+        </el-row>
+      </div>
+
+      <!-- 数据表格 -->
+      <el-card shadow="hover" style="margin-top: 20px;">
+        <template #header>
+          <div class="table-header">
+            <span>{{ getTableTitle() }}</span>
+          </div>
+        </template>
+        <el-table
+          :data="tableData"
+          border
+          style="width: 100%"
+          v-loading="loading"
+        >
+          <el-table-column v-if="filters.type === 'daily'" prop="date" label="日期" width="120" />
+          <el-table-column v-if="filters.type === 'weekly'" prop="week" label="周次" width="120" />
+          <el-table-column v-if="filters.type === 'monthly'" prop="month" label="月份" width="120" />
+          <el-table-column prop="total_bookings" label="预约总数" width="100" />
+          <el-table-column prop="pending_bookings" label="待处理" width="100" />
+          <el-table-column prop="confirmed_bookings" label="已确认" width="100" />
+          <el-table-column prop="assigned_bookings" label="已分配" width="100" />
+          <el-table-column prop="in_progress_bookings" label="进行中" width="100" />
+          <el-table-column prop="completed_bookings" label="已完成" width="100" />
+          <el-table-column prop="cancelled_bookings" label="已取消" width="100" />
+          <el-table-column prop="completion_rate" label="完成率" width="100">
+            <template #default="scope">
+              {{ (scope.row.completion_rate * 100).toFixed(2) }}%
+            </template>
+          </el-table-column>
+          <el-table-column prop="avg_duration" label="平均安装时长(小时)" min-width="150">
+            <template #default="scope">
+              {{ scope.row.avg_duration ? scope.row.avg_duration.toFixed(2) : '-' }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </el-card>
+  </div>
+</template>
+
+<script>
+import { ref, reactive, onMounted, nextTick } from 'vue';
+import { ElMessage } from 'element-plus';
+import * as echarts from 'echarts/core';
+import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components';
+import { PieChart, BarChart, LineChart } from 'echarts/charts';
+import { CanvasRenderer } from 'echarts/renderers';
+import installationApi from '../../api/installationApi';
+import { Calendar, CircleCheck, Money, Wallet } from '@element-plus/icons-vue';
+
+// 注册必须的组件
+echarts.use([
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent,
+  PieChart,
+  BarChart,
+  LineChart,
+  CanvasRenderer
+]);
+
+export default {
+  name: 'InstallationStatistics',
+  components: {
+    Calendar,
+    CircleCheck,
+    Money,
+    Wallet
+  },
+  setup() {
+    // 数据加载状态
+    const loading = ref(false);
+
+    // 工程师列表
+    const engineers = ref([]);
+
+    // 图表实例
+    const charts = {
+      status: null,
+      engineer: null,
+      trend: null
+    };
+
+    // 日期范围快捷选项
+    const dateRangeShortcuts = [
+      {
+        text: '最近一周',
+        value: () => {
+          const end = new Date();
+          const start = new Date();
+          start.setTime(start.getTime() - 3600 * 1000 * 24 * 7);
+          return [start, end];
+        },
+      },
+      {
+        text: '最近一个月',
+        value: () => {
+          const end = new Date();
+          const start = new Date();
+          start.setTime(start.getTime() - 3600 * 1000 * 24 * 30);
+          return [start, end];
+        },
+      },
+      {
+        text: '最近三个月',
+        value: () => {
+          const end = new Date();
+          const start = new Date();
+          start.setTime(start.getTime() - 3600 * 1000 * 24 * 90);
+          return [start, end];
+        },
+      },
+    ];
+
+    // 筛选条件
+    const filters = reactive({
+      dateRange: getDefaultDateRange(),
+      engineer_id: '',
+      type: 'daily'
+    });
+
+    // 统计概览数据
+    const overview = reactive({
+      totalBookings: 0,
+      completedBookings: 0,
+      pendingBookings: 0,
+      cancelledBookings: 0,
+      totalRevenue: 0,
+      paidBookings: 0,
+      unpaidBookings: 0
+    });
+
+    // 表格数据
+    const tableData = ref([]);
+
+    // 获取默认日期范围（最近30天）
+    function getDefaultDateRange() {
+      const end = new Date();
+      const start = new Date();
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 30);
+      return [
+        formatDateString(start),
+        formatDateString(end)
+      ];
+    }
+
+    // 格式化日期为 YYYY-MM-DD
+    function formatDateString(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // 格式化货币
+    function formatCurrency(value) {
+      const num = parseFloat(value);
+      if (isNaN(num)) return '0.00';
+      return num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    // 获取工程师列表
+    const getEngineers = async () => {
+      try {
+        const response = await installationApi.getEngineers();
+        if (response.data && response.data.code === 0) {
+          engineers.value = response.data.data || [];
+        } else {
+          ElMessage.warning('获取工程师列表失败');
+        }
+      } catch (error) {
+        console.error('获取工程师列表失败:', error);
+        ElMessage.error('获取工程师列表失败，请检查网络和API配置');
+      }
+    };
+
+    // 获取统计数据
+    const fetchData = async () => {
+      loading.value = true;
+      try {
+        const params = {
+          type: filters.type
+        };
+
+        if (filters.engineer_id) {
+          params.engineer_id = filters.engineer_id;
+        }
+
+        if (filters.dateRange && filters.dateRange.length === 2) {
+          params.date_start = filters.dateRange[0];
+          params.date_end = filters.dateRange[1];
+        }
+
+        // 使用API获取统计数据
+        const response = await installationApi.getStatistics(params);
+        if (response.data && response.data.code === 0) {
+          // 确保数据存在且格式正确
+          const data = response.data.data || {};
+
+          // 打印数据结构，便于调试
+          console.log('Statistics data:', data);
+
+          // 更新概览数据 - 确保安全访问
+          const overviewData = data.overview || {};
+          overview.totalBookings = overviewData.total_bookings || 0;
+          overview.completedBookings = overviewData.completed_bookings || 0;
+          overview.pendingBookings = overviewData.pending_bookings || 0;
+          overview.cancelledBookings = overviewData.cancelled_bookings || 0;
+          overview.totalRevenue = overviewData.total_revenue || 0;
+          overview.paidBookings = overviewData.paid_bookings || 0;
+          overview.unpaidBookings = overviewData.unpaid_bookings || 0;
+
+          // 更新表格数据
+          if (data.details && Array.isArray(data.details)) {
+            tableData.value = data.details || [];
+          }
+
+          // 更新图表数据
+          const chartsData = {
+            status_distribution: data.status_distribution || [],
+            engineer_ranking: data.engineer_ranking || [],
+            trends: {
+              dates: [],
+              total: [],
+              completed: [],
+              paid: []
+            }
+          };
+
+          // 处理趋势数据
+          if (data.trends && data.trends.dates) {
+            chartsData.trends.dates = data.trends.dates || [];
+            chartsData.trends.total = data.trends.total || [];
+            chartsData.trends.completed = data.trends.completed || [];
+            chartsData.trends.paid = data.trends.paid || [];
+          }
+
+          // 更新图表
+          updateCharts(chartsData);
+        } else {
+          ElMessage.error(response.data?.message || '获取统计数据失败');
+        }
+      } catch (error) {
+        console.error('获取统计数据失败:', error);
+        // 打印详细错误信息便于调试
+        if (error.response) {
+          console.error('Error response:', error.response);
+          console.error('Error data:', error.response.data);
+        }
+        ElMessage.error('获取统计数据失败: ' + (error.response?.data?.message || error.message));
+      } finally {
+        loading.value = false;
+      }
+    };
+
+
+
+    // 更新图表
+    const updateCharts = (data) => {
+      nextTick(() => {
+        // 状态分布图
+        if (data.status_distribution && Array.isArray(data.status_distribution)) {
+          // 确保所有值都是数字
+          const safeDistribution = data.status_distribution.map(item => ({
+            name: getStatusLabel(item.status || item.name),
+            value: Number(item.value || 0)
+          }));
+
+          const statusChart = echarts.init(document.getElementById('status-chart'));
+          statusChart.setOption({
+            tooltip: {
+              trigger: 'item',
+              formatter: '{a} <br/>{b}: {c} ({d}%)'
+            },
+            legend: {
+              orient: 'vertical',
+              left: 10,
+              data: safeDistribution.map(item => item.name)
+            },
+            series: [
+              {
+                name: '预约状态',
+                type: 'pie',
+                radius: ['50%', '70%'],
+                avoidLabelOverlap: false,
+                label: {
+                  show: false,
+                  position: 'center'
+                },
+                emphasis: {
+                  label: {
+                    show: true,
+                    fontSize: '16',
+                    fontWeight: 'bold'
+                  }
+                },
+                labelLine: {
+                  show: false
+                },
+                data: safeDistribution
+              }
+            ]
+          });
+          charts.status = statusChart;
+        }
+
+        // 工程师排名图
+        try {
+          console.log('Rendering engineer chart with data:', data);
+
+          // 首先检查engineer_ranking是否存在且是数组
+          if (!data.engineer_ranking || !Array.isArray(data.engineer_ranking)) {
+            console.warn('Engineer ranking data is missing or not an array');
+            // 创建空图表
+            const engineerChart = echarts.init(document.getElementById('engineer-chart'));
+            engineerChart.setOption({
+              title: {
+                text: '暂无工程师数据',
+                left: 'center',
+                top: 'center'
+              },
+              xAxis: {
+                type: 'category',
+                data: []
+              },
+              yAxis: {
+                type: 'value'
+              },
+              series: []
+            });
+            charts.engineer = engineerChart;
+            return; // 提前返回，不执行后面的代码
+          }
+
+          console.log('Engineer ranking data:', data.engineer_ranking);
+
+          // 手动创建安全的工程师数据
+          const safeEngineerData = [];
+
+          console.log('Processing engineer data with type:', typeof data.engineer_ranking);
+
+          try {
+            // 逐个检查每个元素
+            for (let i = 0; i < data.engineer_ranking.length; i++) {
+              try {
+                const item = data.engineer_ranking[i];
+                console.log(`Engineer item ${i}:`, item);
+
+                // 更严格的类型检查
+                if (item && typeof item === 'object') {
+                  // 更安全的属性访问
+                  let name = '未知工程师' + (i + 1);
+                  let value = 0;
+
+                  if ('name' in item && item.name) {
+                    name = String(item.name);
+                  }
+
+                  if ('value' in item) {
+                    value = Number(item.value || 0);
+                  }
+
+                  safeEngineerData.push({
+                    name: name,
+                    value: value
+                  });
+                }
+              } catch (itemError) {
+                console.error(`Error processing engineer item ${i}:`, itemError);
+              }
+            }
+          } catch (loopError) {
+            console.error('Error in engineer data loop:', loopError);
+          }
+
+          console.log('Safe engineer data:', safeEngineerData);
+
+          // 如果没有有效数据，显示空图表
+          if (safeEngineerData.length === 0) {
+            const engineerChart = echarts.init(document.getElementById('engineer-chart'));
+            engineerChart.setOption({
+              title: {
+                text: '暂无有效工程师数据',
+                left: 'center',
+                top: 'center'
+              },
+              xAxis: {
+                type: 'category',
+                data: []
+              },
+              yAxis: {
+                type: 'value'
+              },
+              series: []
+            });
+            charts.engineer = engineerChart;
+            return;
+          }
+
+          // 安全地获取名称和值
+          const engineerNames = safeEngineerData.map(item => item.name);
+          const engineerValues = safeEngineerData.map(item => item.value);
+
+          const engineerChart = echarts.init(document.getElementById('engineer-chart'));
+          engineerChart.setOption({
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: {
+                type: 'shadow'
+              }
+            },
+            xAxis: {
+              type: 'category',
+              data: engineerNames,
+              axisLabel: {
+                interval: 0,
+                rotate: 30
+              }
+            },
+            yAxis: {
+              type: 'value'
+            },
+            series: [
+              {
+                name: '完成安装数',
+                type: 'bar',
+                data: engineerValues
+              }
+            ]
+          });
+          charts.engineer = engineerChart;
+        } catch (error) {
+          console.error('Error rendering engineer chart:', error);
+          // 出错时显示错误提示
+          const engineerChart = echarts.init(document.getElementById('engineer-chart'));
+          engineerChart.setOption({
+            title: {
+              text: '图表渲染错误',
+              left: 'center',
+              top: 'center'
+            },
+            xAxis: {
+              type: 'category',
+              data: []
+            },
+            yAxis: {
+              type: 'value'
+            },
+            series: []
+          });
+          charts.engineer = engineerChart;
+        }
+
+        // 趋势图
+        if (data.trends && data.trends.dates) {
+          const trendChart = echarts.init(document.getElementById('trend-chart'));
+          trendChart.setOption({
+            tooltip: {
+              trigger: 'axis'
+            },
+            legend: {
+              data: ['总预约', '已完成', '已支付']
+            },
+            xAxis: {
+              type: 'category',
+              boundaryGap: false,
+              data: data.trends.dates
+            },
+            yAxis: {
+              type: 'value'
+            },
+            series: [
+              {
+                name: '总预约',
+                type: 'line',
+                data: data.trends.total
+              },
+              {
+                name: '已完成',
+                type: 'line',
+                data: data.trends.completed
+              },
+              {
+                name: '已支付',
+                type: 'line',
+                data: data.trends.paid
+              }
+            ]
+          });
+          charts.trend = trendChart;
+        }
+      });
+    };
+
+    // 获取状态标签
+    const getStatusLabel = (status) => {
+      const statusMap = {
+        'pending': '待处理',
+        'confirmed': '已确认',
+        'assigned': '已分配',
+        'in_progress': '进行中',
+        'completed': '已完成',
+        'cancelled': '已取消'
+      };
+      return statusMap[status] || status;
+    };
+
+    // 获取表格标题
+    const getTableTitle = () => {
+      switch (filters.type) {
+        case 'daily':
+          return '每日安装统计';
+        case 'weekly':
+          return '每周安装统计';
+        case 'monthly':
+          return '每月安装统计';
+        default:
+          return '安装统计数据';
+      }
+    };
+
+    // 导出数据
+    const exportData = () => {
+      ElMessage.info('导出功能开发中...');
+    };
+
+    // 处理搜索
+    const handleSearch = () => {
+      fetchData();
+    };
+
+    // 重置筛选条件
+    const resetFilters = () => {
+      filters.dateRange = getDefaultDateRange();
+      filters.engineer_id = '';
+      filters.type = 'daily';
+      fetchData();
+    };
+
+    // 监听窗口大小变化，重新调整图表大小
+    window.addEventListener('resize', () => {
+      for (const key in charts) {
+        if (charts[key]) {
+          charts[key].resize();
+        }
+      }
+    });
+
+    // 页面加载时获取数据
+    onMounted(() => {
+      getEngineers();
+      fetchData();
+    });
+
+    return {
+      loading,
+      engineers,
+      dateRangeShortcuts,
+      filters,
+      overview,
+      tableData,
+      formatCurrency,
+      getStatusLabel,
+      getTableTitle,
+      fetchData,
+      exportData,
+      handleSearch,
+      resetFilters
+    };
+  }
+};
+</script>
+
+<style scoped>
+.installation-statistics-page {
+  padding: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.filter-container {
+  margin-bottom: 20px;
+}
+
+.stat-cards {
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  height: 120px;
+}
+
+.stat-card-content {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.stat-icon {
+  font-size: 48px;
+  margin-right: 20px;
+  color: #409EFF;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-title {
+  font-size: 16px;
+  color: #909399;
+  margin-bottom: 10px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #303133;
+}
+
+.chart-container {
+  margin-top: 20px;
+}
+
+.chart-card {
+  margin-bottom: 20px;
+}
+
+.chart {
+  height: 300px;
+}
+
+.chart-header, .table-header {
+  font-size: 16px;
+  font-weight: bold;
+}
+</style>

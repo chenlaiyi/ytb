@@ -1,0 +1,177 @@
+<template>
+  <div class="profile-container">
+    <el-card class="profile-card">
+      <template #header>
+        <div class="card-header">
+          <span>个人信息</span>
+        </div>
+      </template>
+      
+      <el-form
+        ref="profileFormRef"
+        :model="profileForm"
+        :rules="profileRules"
+        label-width="100px"
+        class="profile-form"
+      >
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="profileForm.username" disabled />
+        </el-form-item>
+        
+        <el-form-item label="姓名" prop="name">
+          <el-input v-model="profileForm.name" placeholder="请输入姓名" />
+        </el-form-item>
+        
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
+        </el-form-item>
+        
+        <el-form-item label="手机号" prop="phone">
+          <el-input v-model="profileForm.phone" placeholder="请输入手机号" />
+        </el-form-item>
+        
+        <el-form-item>
+          <el-button type="primary" @click="updateProfile" :loading="loading">
+            保存修改
+          </el-button>
+          <el-button @click="resetForm">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+  </div>
+</template>
+
+<script>
+import { ref, reactive, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
+import adminApi from '@/api/admin';
+
+export default {
+  name: 'Profile',
+  setup() {
+    const profileFormRef = ref();
+    const loading = ref(false);
+    
+    const profileForm = reactive({
+      username: '',
+      name: '',
+      email: '',
+      phone: ''
+    });
+    
+    const profileRules = {
+      name: [
+        { required: true, message: '请输入姓名', trigger: 'blur' }
+      ],
+      email: [
+        { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
+      ],
+      phone: [
+        { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
+      ]
+    };
+    
+    // 获取用户信息
+    const fetchUserInfo = async () => {
+      try {
+        const response = await adminApi.getCurrentUser();
+        console.log('获取用户信息响应:', response);
+        
+        if (response.data && response.data.code === 0) {
+          const user = response.data.data;
+          profileForm.username = user.username || '';
+          profileForm.name = user.name || '';
+          profileForm.email = user.email || '';
+          profileForm.phone = user.phone || '';
+        } else {
+          throw new Error(response.data?.message || '获取用户信息失败');
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error);
+        
+        // 如果是401错误，说明token无效，需要重新登录
+        if (error.response && error.response.status === 401) {
+          ElMessage.error('登录已过期，请重新登录');
+          // 清除本地存储
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          // 跳转到登录页
+          setTimeout(() => {
+            window.location.href = '/admin/#/login';
+          }, 1500);
+        } else {
+          ElMessage.error('获取用户信息失败，请尝试重新登录');
+        }
+      }
+    };
+    
+    // 更新个人信息
+    const updateProfile = async () => {
+      if (!profileFormRef.value) return;
+      
+      try {
+        await profileFormRef.value.validate();
+        loading.value = true;
+        
+        const response = await adminApi.updateProfile({
+          name: profileForm.name,
+          email: profileForm.email,
+          phone: profileForm.phone
+        });
+        
+        if (response.data && response.data.code === 0) {
+          ElMessage.success('个人信息更新成功');
+        } else {
+          throw new Error(response.data?.message || '更新失败');
+        }
+      } catch (error) {
+        console.error('更新个人信息失败:', error);
+        ElMessage.error(error.message || '更新个人信息失败');
+      } finally {
+        loading.value = false;
+      }
+    };
+    
+    // 重置表单
+    const resetForm = () => {
+      fetchUserInfo();
+    };
+    
+    onMounted(() => {
+      fetchUserInfo();
+    });
+    
+    return {
+      profileFormRef,
+      profileForm,
+      profileRules,
+      loading,
+      updateProfile,
+      resetForm
+    };
+  }
+};
+</script>
+
+<style scoped>
+.profile-container {
+  padding: 20px;
+}
+
+.profile-card {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.profile-form {
+  margin-top: 20px;
+}
+</style> 

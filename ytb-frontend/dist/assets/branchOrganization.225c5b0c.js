@@ -1,0 +1,1 @@
+import{r as n}from"./request.8be5b9e0.js";function t(a={}){return n({url:"/api/admin/v1/branch-organizations",method:"get",params:a})}function i(){return n({url:"/api/admin/v1/branch-organizations/options",method:"get"})}export{t as a,i as g};

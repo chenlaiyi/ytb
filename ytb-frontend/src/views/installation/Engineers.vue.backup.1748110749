@@ -1,0 +1,787 @@
+<template>
+  <div class="engineers-page">
+    <el-card class="box-card">
+      <template #header>
+        <div class="card-header">
+          <span>工程师管理</span>
+          <div class="header-buttons">
+            <el-button type="primary" @click="handleCreate">添加工程师</el-button>
+            <el-button type="success" @click="handleSyncFromWaterDb" :loading="syncLoading">同步指定渠道商工程师</el-button>
+            <el-button type="warning" @click="handleUpdateInstallationCount" :loading="updateCountLoading">更新安装数量</el-button>
+            <el-button type="info" @click="handleViewWaterDbTables" :loading="waterDbTablesLoading">查看净水器表结构</el-button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 搜索过滤区域 -->
+      <div class="filter-container">
+        <el-form :inline="true" :model="filters" class="demo-form-inline">
+          <el-form-item label="关键词">
+            <el-input v-model="filters.keyword" placeholder="姓名/电话/区域" clearable />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="filters.status" placeholder="全部" clearable>
+              <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="级别">
+            <el-select v-model="filters.level" placeholder="全部" clearable>
+              <el-option v-for="item in levelOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleSearch">搜索</el-button>
+            <el-button @click="resetFilters">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <!-- 工程师列表 -->
+      <el-table
+        v-loading="loading"
+        :data="engineerList"
+        border
+        style="width: 100%"
+        row-key="id"
+      >
+        <el-table-column prop="id" label="ID" width="80" align="center" />
+        <el-table-column label="姓名" width="120">
+          <template #default="scope">
+            <div class="engineer-info">
+              <span>{{ scope.row.name }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="phone" label="联系电话" width="150" />
+        <el-table-column prop="area" label="负责区域" min-width="180" />
+        <el-table-column label="级别" width="100" align="center">
+          <template #default="scope">
+            <el-tag :type="getLevelType(scope.row.level)">
+              {{ getLevelLabel(scope.row.level) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="scope">
+            <el-tag :type="getStatusType(scope.row.status)">
+              {{ getStatusLabel(scope.row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="completed_installations" label="完成安装数" width="120" align="center" />
+        <el-table-column label="创建时间" width="180">
+          <template #default="scope">
+            {{ formatDateTime(scope.row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="scope">
+            <el-button size="small" type="primary" @click="handleEdit(scope.row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.limit"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="pagination.total"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
+    </el-card>
+
+    <!-- 工程师表单对话框 -->
+    <el-dialog
+      :title="dialogStatus === 'create' ? '添加工程师' : '编辑工程师'"
+      v-model="dialogFormVisible"
+      width="500px"
+    >
+      <el-form
+        ref="engineerFormRef"
+        :model="engineerForm"
+        :rules="rules"
+        label-width="100px"
+      >
+        <el-form-item label="姓名" prop="name">
+          <el-input v-model="engineerForm.name" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="联系电话" prop="phone">
+          <el-input v-model="engineerForm.phone" placeholder="请输入联系电话" />
+        </el-form-item>
+        <el-form-item label="负责区域" prop="area">
+          <el-input v-model="engineerForm.area" placeholder="请输入负责区域" />
+        </el-form-item>
+        <el-form-item label="级别" prop="level">
+          <el-select v-model="engineerForm.level" placeholder="请选择级别">
+            <el-option v-for="item in levelOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="技能描述" prop="skills">
+          <el-input v-model="engineerForm.skills" type="textarea" :rows="3" placeholder="请输入技能描述" />
+        </el-form-item>
+        <el-form-item label="状态" prop="status">
+          <el-select v-model="engineerForm.status" placeholder="请选择状态">
+            <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注" prop="remark">
+          <el-input v-model="engineerForm.remark" type="textarea" :rows="3" placeholder="请输入备注信息" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="dialogFormVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitForm" :loading="submitLoading">确定</el-button>
+        </div>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script>
+import { ref, reactive, onMounted } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import engineerApi from '@/api/engineerApi';
+
+export default {
+  name: 'EngineersList',
+  setup() {
+    // 数据加载状态
+    const loading = ref(false);
+    const submitLoading = ref(false);
+    const syncLoading = ref(false);
+    const updateCountLoading = ref(false);
+    const waterDbTablesLoading = ref(false);
+
+    // 工程师列表数据
+    const engineerList = ref([]);
+
+    // 分页配置
+    const pagination = reactive({
+      page: 1,
+      limit: 10,
+      total: 0
+    });
+
+    // 搜索过滤条件
+    const filters = reactive({
+      keyword: '',
+      status: '',
+      level: ''
+    });
+
+    // 状态选项
+    const statusOptions = [
+      { value: 'active', label: '在职', type: 'success' },
+      { value: 'busy', label: '忙碌', type: 'warning' },
+      { value: 'leave', label: '请假', type: 'info' },
+      { value: 'disabled', label: '禁用', type: 'danger' }
+    ];
+
+    // 级别选项
+    const levelOptions = [
+      { value: 'junior', label: '初级', type: 'info' },
+      { value: 'normal', label: '中级', type: 'success' },
+      { value: 'senior', label: '高级', type: 'warning' }
+    ];
+
+    // 对话框状态
+    const dialogStatus = ref('create');
+    const dialogFormVisible = ref(false);
+    const engineerFormRef = ref(null);
+
+    // 工程师表单数据
+    const engineerForm = reactive({
+      id: undefined,
+      name: '',
+      phone: '',
+      area: '',
+      level: 'normal',
+      skills: '',
+      status: 'active',
+      remark: ''
+    });
+
+    // 表单验证规则
+    const rules = {
+      name: [
+        { required: true, message: '请输入姓名', trigger: 'blur' },
+        { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+      ],
+      phone: [
+        { required: true, message: '请输入联系电话', trigger: 'blur' },
+        { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号码', trigger: 'blur' }
+      ],
+      area: [
+        { required: true, message: '请输入负责区域', trigger: 'blur' }
+      ],
+      level: [
+        { required: true, message: '请选择级别', trigger: 'change' }
+      ],
+      status: [
+        { required: true, message: '请选择状态', trigger: 'change' }
+      ]
+    };
+
+    // 获取工程师列表
+    const getEngineerList = async () => {
+      loading.value = true;
+      try {
+        const params = {
+          keyword: filters.keyword || undefined,
+          status: filters.status || undefined,
+          level: filters.level || undefined,
+          page: pagination.page,
+          limit: pagination.limit
+        };
+
+        console.log('发送分页参数:', params);
+
+        const response = await engineerApi.getEngineers(params);
+        console.log('工程师列表响应:', response);
+
+        // 处理响应
+        let responseData;
+
+        // 先检查是否有效响应
+        if (response.data && response.data.code === 0) {
+          // 有效响应
+          responseData = response.data;
+        } else if (response.data && response.data.data && response.data.data.code === 0) {
+          // 嵌套响应
+          responseData = response.data.data;
+        } else if (response.code === 0) {
+          // 直接响应
+          responseData = response;
+        } else {
+          // 无效响应
+          const errorMsg = (response.data && response.data.message) ||
+                          (response.data && response.data.data && response.data.data.message) ||
+                          response.message ||
+                          '获取工程师列表失败';
+          console.error('工程师列表响应错误:', errorMsg, response);
+          ElMessage.error(errorMsg);
+          loading.value = false;
+          return;
+        }
+
+        // 提取数据
+        if (responseData.data) {
+          // 处理分页数据
+          if (responseData.data.list) {
+            // 新的分页格式
+            engineerList.value = responseData.data.list || [];
+            if (responseData.data.pagination) {
+              pagination.total = responseData.data.pagination.total || 0;
+              // 可选同步其他分页参数
+              if (responseData.data.pagination.page) {
+                pagination.page = responseData.data.pagination.page;
+              }
+              if (responseData.data.pagination.limit) {
+                pagination.limit = responseData.data.pagination.limit;
+              }
+            }
+            console.log('分页数据处理成功:', pagination);
+          } else {
+            // 兼容旧的非分页格式
+            engineerList.value = responseData.data || [];
+            pagination.total = engineerList.value.length;
+            console.log('非分页数据处理成功:', pagination);
+          }
+        } else {
+          console.error('工程师列表响应数据缺失data字段:', responseData);
+          ElMessage.error('响应数据格式错误');
+        }
+      } catch (error) {
+        console.error('获取工程师列表失败:', error);
+        ElMessage.error('获取工程师列表失败，请重试');
+      } finally {
+        loading.value = false;
+      }
+    };
+
+    // 搜索按钮点击事件
+    const handleSearch = () => {
+      pagination.page = 1;
+      getEngineerList();
+    };
+
+    // 重置过滤条件
+    const resetFilters = () => {
+      filters.keyword = '';
+      filters.status = '';
+      filters.level = '';
+      handleSearch();
+    };
+
+    // 切换每页显示数量
+    const handleSizeChange = (val) => {
+      pagination.limit = val;
+      getEngineerList();
+    };
+
+    // 切换页码
+    const handleCurrentChange = (val) => {
+      pagination.page = val;
+      getEngineerList();
+    };
+
+    // 添加工程师
+    const handleCreate = () => {
+      resetForm();
+      dialogStatus.value = 'create';
+      dialogFormVisible.value = true;
+    };
+
+    // 编辑工程师
+    const handleEdit = (row) => {
+      resetForm();
+      dialogStatus.value = 'update';
+      engineerForm.id = row.id;
+      engineerForm.name = row.name;
+      engineerForm.phone = row.phone;
+      engineerForm.area = row.area;
+      engineerForm.level = row.level;
+      engineerForm.skills = row.skills;
+      engineerForm.status = row.status;
+      engineerForm.remark = row.remark;
+      dialogFormVisible.value = true;
+    };
+
+    // 删除工程师
+    const handleDelete = (row) => {
+      ElMessageBox.confirm(
+        '确定要删除该工程师吗？',
+        '提示',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      ).then(async () => {
+        try {
+          const response = await engineerApi.deleteEngineer(row.id);
+          console.log('删除工程师响应:', response);
+
+          // 处理响应
+          let responseData;
+
+          // 先检查是否有效响应
+          if (response.data && response.data.code === 0) {
+            // 有效响应
+            responseData = response.data;
+          } else if (response.data && response.data.data && response.data.data.code === 0) {
+            // 嵌套响应
+            responseData = response.data.data;
+          } else if (response.code === 0) {
+            // 直接响应
+            responseData = response;
+          } else {
+            // 无效响应
+            const errorMsg = (response.data && response.data.message) ||
+                            (response.data && response.data.data && response.data.data.message) ||
+                            response.message ||
+                            '删除失败';
+            console.error('删除工程师响应错误:', errorMsg, response);
+            ElMessage.error(errorMsg);
+            return;
+          }
+
+          ElMessage.success(responseData.message || '删除成功');
+          getEngineerList();
+        } catch (error) {
+          console.error('删除工程师失败:', error);
+          ElMessage.error('删除工程师失败，请重试');
+        }
+      }).catch(() => {
+        // 取消删除
+      });
+    };
+
+    // 重置表单
+    const resetForm = () => {
+      if (engineerFormRef.value) {
+        engineerFormRef.value.resetFields();
+      }
+      engineerForm.id = undefined;
+      engineerForm.name = '';
+      engineerForm.phone = '';
+      engineerForm.area = '';
+      engineerForm.level = 'normal';
+      engineerForm.skills = '';
+      engineerForm.status = 'active';
+      engineerForm.remark = '';
+    };
+
+    // 提交表单
+    const submitForm = async () => {
+      if (!engineerFormRef.value) return;
+
+      await engineerFormRef.value.validate(async (valid) => {
+        if (valid) {
+          submitLoading.value = true;
+          try {
+            const formData = {
+              name: engineerForm.name,
+              phone: engineerForm.phone,
+              area: engineerForm.area,
+              level: engineerForm.level,
+              skills: engineerForm.skills,
+              status: engineerForm.status,
+              remark: engineerForm.remark
+            };
+
+            let response;
+            if (dialogStatus.value === 'create') {
+              response = await engineerApi.createEngineer(formData);
+            } else {
+              response = await engineerApi.updateEngineer(engineerForm.id, formData);
+            }
+
+            console.log(dialogStatus.value === 'create' ? '添加工程师响应:' : '更新工程师响应:', response);
+
+            // 处理响应
+            let responseData;
+
+            // 先检查是否有效响应
+            if (response.data && response.data.code === 0) {
+              // 有效响应
+              responseData = response.data;
+            } else if (response.data && response.data.data && response.data.data.code === 0) {
+              // 嵌套响应
+              responseData = response.data.data;
+            } else if (response.code === 0) {
+              // 直接响应
+              responseData = response;
+            } else {
+              // 无效响应
+              const errorMsg = (response.data && response.data.message) ||
+                              (response.data && response.data.data && response.data.data.message) ||
+                              response.message ||
+                              (dialogStatus.value === 'create' ? '添加失败' : '更新失败');
+              console.error(dialogStatus.value === 'create' ? '添加工程师响应错误:' : '更新工程师响应错误:', errorMsg, response);
+              ElMessage.error(errorMsg);
+              return;
+            }
+
+            ElMessage.success(responseData.message || (dialogStatus.value === 'create' ? '添加成功' : '更新成功'));
+            dialogFormVisible.value = false;
+            getEngineerList();
+          } catch (error) {
+            console.error(dialogStatus.value === 'create' ? '添加工程师失败:' : '更新工程师失败:', error);
+            ElMessage.error(dialogStatus.value === 'create' ? '添加工程师失败，请重试' : '更新工程师失败，请重试');
+          } finally {
+            submitLoading.value = false;
+          }
+        } else {
+          return false;
+        }
+      });
+    };
+
+    // 获取状态类型
+    const getStatusType = (status) => {
+      const found = statusOptions.find(item => item.value === status);
+      return found ? found.type : 'info';
+    };
+
+    // 获取状态标签
+    const getStatusLabel = (status) => {
+      const found = statusOptions.find(item => item.value === status);
+      return found ? found.label : status;
+    };
+
+    // 获取级别类型
+    const getLevelType = (level) => {
+      const found = levelOptions.find(item => item.value === level);
+      return found ? found.type : 'info';
+    };
+
+    // 获取级别标签
+    const getLevelLabel = (level) => {
+      const found = levelOptions.find(item => item.value === level);
+      return found ? found.label : level;
+    };
+
+    // 格式化日期时间
+    const formatDateTime = (dateTime) => {
+      if (!dateTime) return '';
+      const date = new Date(dateTime);
+      return date.toLocaleString();
+    };
+
+    // 从净水器数据库同步工程师数据
+    const handleSyncFromWaterDb = async () => {
+      try {
+        syncLoading.value = true;
+        console.log('开始同步工程师数据...');
+
+        console.log('发送同步请求...');
+        // 使用engineerApi调用同步方法
+        const response = await engineerApi.syncFromWaterDb();
+        console.log('同步响应:', response);
+
+        // 处理响应
+        let responseData;
+
+        // 先检查是否有效响应
+        if (response.data && response.data.code === 0) {
+          // 有效响应
+          responseData = response.data;
+        } else if (response.data && response.data.data && response.data.data.code === 0) {
+          // 嵌套响应
+          responseData = response.data.data;
+        } else if (response && response.code === 0) {
+          // 直接响应
+          responseData = response;
+        } else {
+          // 无效响应
+          const errorMsg = (response.data && response.data.message) ||
+                          (response.data && response.data.data && response.data.data.message) ||
+                          (response && response.message) ||
+                          '同步失败';
+          console.error('同步工程师数据响应错误:', errorMsg, response);
+          ElMessage.error(errorMsg);
+          return;
+        }
+
+        // 提取数据
+        if (responseData.data) {
+          const { total, sync_count, skip_count, error_count } = responseData.data;
+          ElMessage.success(`同步完成！共${total}条数据，成功${sync_count}条，跳过${skip_count}条，失败${error_count}条`);
+          // 刷新列表
+          getEngineerList();
+        } else {
+          console.error('同步工程师数据响应数据缺失data字段:', responseData);
+          ElMessage.success(responseData.message || '同步完成');
+          getEngineerList();
+        }
+      } catch (error) {
+        console.error('同步工程师数据失败:', error);
+        if (error.response) {
+          console.error('错误响应:', error.response.data);
+          ElMessage.error(`同步失败: ${error.response.data?.message || error.message}`);
+        } else {
+          ElMessage.error(`同步失败: ${error.message}`);
+        }
+      } finally {
+        syncLoading.value = false;
+      }
+    };
+
+    // 页面加载时获取数据
+    onMounted(() => {
+      getEngineerList();
+    });
+
+    // 更新所有工程师的安装数量
+    const handleUpdateInstallationCount = async () => {
+      try {
+        updateCountLoading.value = true;
+        console.log('开始更新工程师安装数量...');
+
+        const response = await engineerApi.updateInstallationCount();
+        console.log('更新安装数量响应:', response);
+
+        // 处理响应
+        let responseData;
+
+        // 先检查是否有效响应
+        if (response.data && response.data.code === 0) {
+          // 有效响应
+          responseData = response.data;
+        } else if (response.data && response.data.data && response.data.data.code === 0) {
+          // 嵌套响应
+          responseData = response.data.data;
+        } else if (response && response.code === 0) {
+          // 直接响应
+          responseData = response;
+        } else {
+          // 无效响应
+          const errorMsg = (response.data && response.data.message) ||
+                          (response.data && response.data.data && response.data.data.message) ||
+                          (response && response.message) ||
+                          '更新安装数量失败';
+          console.error('更新安装数量响应错误:', errorMsg, response);
+          ElMessage.error(errorMsg);
+          return;
+        }
+
+        ElMessage.success(responseData.message || '更新安装数量成功');
+        // 刷新列表
+        getEngineerList();
+      } catch (error) {
+        console.error('更新安装数量失败:', error);
+        ElMessage.error('更新安装数量失败，请重试');
+      } finally {
+        updateCountLoading.value = false;
+      }
+    };
+
+    // 查看净水器数据库表结构
+    const handleViewWaterDbTables = async () => {
+      try {
+        waterDbTablesLoading.value = true;
+        console.log('开始获取净水器数据库表结构...');
+
+        const response = await engineerApi.getWaterDbTables();
+        console.log('获取净水器数据库表结构响应:', response);
+
+        // 处理响应
+        let responseData;
+
+        // 先检查是否有效响应
+        if (response.data && response.data.code === 0) {
+          // 有效响应
+          responseData = response.data;
+        } else if (response.data && response.data.data && response.data.data.code === 0) {
+          // 嵌套响应
+          responseData = response.data.data;
+        } else if (response && response.code === 0) {
+          // 直接响应
+          responseData = response;
+        } else {
+          // 无效响应
+          const errorMsg = (response.data && response.data.message) ||
+                          (response.data && response.data.data && response.data.data.message) ||
+                          (response && response.message) ||
+                          '获取净水器数据库表结构失败';
+          console.error('获取净水器数据库表结构响应错误:', errorMsg, response);
+          ElMessage.error(errorMsg);
+          return;
+        }
+
+        // 显示表结构信息
+        if (responseData.data && responseData.data.tables) {
+          const tables = responseData.data.tables;
+          const structures = responseData.data.structures;
+          const dealerInfo = responseData.data.dealer_info;
+
+          // 构建表结构信息字符串
+          let message = `<h3>净水器数据库包含 ${tables.length} 个表</h3>`;
+
+          // 显示渠道商信息
+          if (dealerInfo) {
+            message += `<h4>指定渠道商信息:</h4>
+              <ul>
+                <li><strong>渠道商编号:</strong> ${dealerInfo.dealer_number}</li>
+                <li><strong>渠道商名称:</strong> ${dealerInfo.dealer_name}</li>
+                <li><strong>渠道商ID:</strong> ${dealerInfo.id}</li>
+                <li><strong>工程师数量:</strong> ${dealerInfo.engineer_count || 0}</li>
+              </ul>`;
+          }
+
+          // 展示安装相关的表
+          const installTables = tables.filter(table => table.includes('install') || table.includes('master') || table.includes('dealer'));
+
+          if (installTables.length > 0) {
+            message += '<h4>相关表结构:</h4><ul>';
+            installTables.forEach(table => {
+              message += `<li><strong>${table}</strong></li>`;
+
+              if (structures[table]) {
+                message += '<ul>';
+                structures[table].forEach(column => {
+                  message += `<li>${column.name} (${column.type})</li>`;
+                });
+                message += '</ul>';
+              }
+            });
+            message += '</ul>';
+          }
+
+          // 使用 Element Plus 的 MessageBox 显示表结构信息
+          ElMessageBox.alert(message, '净水器数据库表结构', {
+            dangerouslyUseHTMLString: true,
+            confirmButtonText: '确定'
+          });
+        } else {
+          ElMessage.warning('未获取到表结构信息');
+        }
+      } catch (error) {
+        console.error('获取净水器数据库表结构失败:', error);
+        ElMessage.error('获取净水器数据库表结构失败，请重试');
+      } finally {
+        waterDbTablesLoading.value = false;
+      }
+    };
+
+    return {
+      loading,
+      submitLoading,
+      syncLoading,
+      updateCountLoading,
+      waterDbTablesLoading,
+      engineerList,
+      pagination,
+      filters,
+      statusOptions,
+      levelOptions,
+      dialogStatus,
+      dialogFormVisible,
+      engineerForm,
+      engineerFormRef,
+      rules,
+      getEngineerList,
+      handleSearch,
+      resetFilters,
+      handleSizeChange,
+      handleCurrentChange,
+      handleCreate,
+      handleEdit,
+      handleDelete,
+      handleSyncFromWaterDb,
+      handleUpdateInstallationCount,
+      handleViewWaterDbTables,
+      submitForm,
+      getStatusType,
+      getStatusLabel,
+      getLevelType,
+      getLevelLabel,
+      formatDateTime
+    };
+  }
+};
+</script>
+
+<style scoped>
+.engineers-page {
+  padding: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.filter-container {
+  margin-bottom: 20px;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.engineer-info {
+  display: flex;
+  align-items: center;
+}
+
+.engineer-info .avatar {
+  margin-right: 8px;
+}
+</style>

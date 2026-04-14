@@ -1,0 +1,301 @@
+<template>
+  <div class="debug-container">
+    <h1>业务员模块调试</h1>
+    
+    <div class="card">
+      <h2>数据库状态</h2>
+      <div class="status-section">
+        <p><strong>salesmen表记录数:</strong> {{ dbStats.salesmen }}</p>
+        <p><strong>app_users表中is_salesman=1的记录数:</strong> {{ dbStats.appUsersSalesman }}</p>
+        <button @click="refreshDbStats" :disabled="loading">刷新统计数据</button>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2>API测试</h2>
+      <div class="api-test-section">
+        <h3>业务员列表API测试</h3>
+        <button @click="testSalesmenListApi" :disabled="loading">测试获取列表</button>
+        <div v-if="loading" class="loading">加载中...</div>
+        
+        <div v-if="apiResult" class="api-result">
+          <h4>API结果</h4>
+          <div v-if="apiResult.success" class="success">
+            <p><strong>成功!</strong></p>
+            <p><strong>总记录数:</strong> {{ apiResult.total }}</p>
+            <p><strong>返回记录数:</strong> {{ apiResult.data ? apiResult.data.length : 0 }}</p>
+            
+            <div v-if="apiResult.data && apiResult.data.length > 0">
+              <h5>第一条记录:</h5>
+              <pre>{{ JSON.stringify(apiResult.data[0], null, 2) }}</pre>
+            </div>
+            
+            <h5>完整响应:</h5>
+            <pre>{{ JSON.stringify(apiResult, null, 2) }}</pre>
+          </div>
+          
+          <div v-else class="error">
+            <p><strong>失败!</strong></p>
+            <p><strong>错误:</strong> {{ apiResult.error }}</p>
+            <pre v-if="apiResult.details">{{ JSON.stringify(apiResult.details, null, 2) }}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2>同步测试</h2>
+      <button @click="runSync" :disabled="syncLoading">运行同步</button>
+      <div v-if="syncLoading" class="loading">同步中...</div>
+      
+      <div v-if="syncResult" class="api-result">
+        <h4>同步结果</h4>
+        <div v-if="syncResult.success" class="success">
+          <p><strong>同步成功!</strong></p>
+          <pre>{{ JSON.stringify(syncResult.data, null, 2) }}</pre>
+        </div>
+        
+        <div v-else class="error">
+          <p><strong>同步失败!</strong></p>
+          <p><strong>错误:</strong> {{ syncResult.error }}</p>
+          <pre v-if="syncResult.details">{{ JSON.stringify(syncResult.details, null, 2) }}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, onMounted } from 'vue';
+import { getSalesmenList } from '@/api/salesman';
+import { syncToSalesmen } from '@/api/appUser';
+import axios from 'axios';
+import { getAdminToken } from '@/utils/admin-token-bridge'
+
+export default {
+  name: 'SalesmenDebug',
+  
+  setup() {
+    const loading = ref(false);
+    const syncLoading = ref(false);
+    const apiResult = ref(null);
+    const syncResult = ref(null);
+    const dbStats = ref({
+      salesmen: 0,
+      appUsersSalesman: 0
+    });
+    
+    // 刷新数据库统计
+    const refreshDbStats = async () => {
+      loading.value = true;
+      
+      try {
+        const response = await axios.get('/admin/api/salesmen/debug/stats', {
+          headers: {
+            'Authorization': `Bearer ${getAdminToken()}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (response.data && response.code === 0) {
+          dbStats.value = response.data;
+        } else {
+          console.error('获取数据库统计失败:', response.data);
+        }
+      } catch (error) {
+        console.error('获取数据库统计错误:', error);
+        // 备用方案：直接查询MySQL
+        try {
+          const mysqlResponse = await axios.get('/admin/api/debug/query-db', {
+            params: {
+              query: 'salesmen_stats'
+            },
+            headers: {
+              'Authorization': `Bearer ${getAdminToken()}`,
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (mysqlResponse && mysqlResponse.code === 0) {
+            dbStats.value = mysqlResponse.data.data;
+          }
+        } catch (mysqlError) {
+          console.error('MySQL查询失败:', mysqlError);
+        }
+      } finally {
+        loading.value = false;
+      }
+    };
+    
+    // 测试业务员列表API
+    const testSalesmenListApi = async () => {
+      loading.value = true;
+      apiResult.value = null;
+      
+      try {
+        const response = await getSalesmenList({
+          page: 1,
+          per_page: 10
+        });
+        
+        
+        apiResult.value = {
+          success: true,
+          data: response.data,
+          total: response.total,
+          current_page: response.current_page,
+          per_page: response.per_page,
+          full_response: response
+        };
+      } catch (error) {
+        console.error('API测试失败:', error);
+        
+        apiResult.value = {
+          success: false,
+          error: error.message || '未知错误',
+          details: error.response ? error.response.data : null
+        };
+      } finally {
+        loading.value = false;
+      }
+    };
+    
+    // 运行同步
+    const runSync = async () => {
+      syncLoading.value = true;
+      syncResult.value = null;
+      
+      try {
+        const response = await syncToSalesmen({
+          force: true
+        });
+        
+        
+        syncResult.value = {
+          success: true,
+          data: response
+        };
+        
+        // 同步成功后刷新统计
+        setTimeout(() => {
+          refreshDbStats();
+        }, 3000);
+      } catch (error) {
+        console.error('同步失败:', error);
+        
+        syncResult.value = {
+          success: false,
+          error: error.message || '未知错误',
+          details: error.response ? error.response.data : null
+        };
+      } finally {
+        syncLoading.value = false;
+      }
+    };
+    
+    onMounted(() => {
+      refreshDbStats();
+    });
+    
+    return {
+      loading,
+      apiResult,
+      syncLoading,
+      syncResult,
+      dbStats,
+      refreshDbStats,
+      testSalesmenListApi,
+      runSync
+    };
+  }
+};
+</script>
+
+<style scoped>
+.debug-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin-bottom: 30px;
+  color: #409EFF;
+}
+
+.card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  color: #303133;
+}
+
+h3 {
+  margin-top: 20px;
+  color: #606266;
+}
+
+.status-section, .api-test-section {
+  margin-bottom: 20px;
+}
+
+button {
+  background-color: #409EFF;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+button:hover {
+  background-color: #66b1ff;
+}
+
+button:disabled {
+  background-color: #a0cfff;
+  cursor: not-allowed;
+}
+
+.loading {
+  margin: 10px 0;
+  color: #909399;
+}
+
+.api-result {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.success {
+  color: #67C23A;
+}
+
+.error {
+  color: #F56C6C;
+}
+
+pre {
+  background-color: #f8f8f8;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+  color: #606266;
+  max-height: 300px;
+  overflow-y: auto;
+}
+</style> 

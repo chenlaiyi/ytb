@@ -1,0 +1,964 @@
+<template>
+  <div class="app-container">
+    <el-card class="box-card">
+      <template #header>
+        <div class="card-header">
+          <span>VIP会员分红管理</span>
+        </div>
+      </template>
+
+      <!-- 统计面板 -->
+      <div class="stats-panel mb-4">
+        <el-row :gutter="20">
+          <el-col :span="4">
+            <el-card shadow="hover" class="stats-card">
+              <template #header>
+                <div class="stats-header">
+                  <span>分红总额</span>
+                </div>
+              </template>
+              <div class="stats-value">{{ stats.totalAmount ? formatCurrency(stats.totalAmount) : '0.00' }}元</div>
+            </el-card>
+          </el-col>
+          <el-col :span="4">
+            <el-card shadow="hover" class="stats-card">
+              <template #header>
+                <div class="stats-header">
+                  <span>待结算金额</span>
+                </div>
+              </template>
+              <div class="stats-value warning">{{ stats.pendingAmount ? formatCurrency(stats.pendingAmount) : '0.00' }}元</div>
+            </el-card>
+          </el-col>
+          <el-col :span="4">
+            <el-card shadow="hover" class="stats-card">
+              <template #header>
+                <div class="stats-header">
+                  <span>已结算金额</span>
+                </div>
+              </template>
+              <div class="stats-value success">{{ stats.settledAmount ? formatCurrency(stats.settledAmount) : '0.00' }}元</div>
+            </el-card>
+          </el-col>
+          <el-col :span="4">
+            <el-card shadow="hover" class="stats-card">
+              <template #header>
+                <div class="stats-header">
+                  <span>VIP招募分红</span>
+                </div>
+              </template>
+              <div class="stats-value info">{{ stats.vipAmount ? formatCurrency(stats.vipAmount) : '0.00' }}元</div>
+            </el-card>
+          </el-col>
+          <el-col :span="4">
+            <el-card shadow="hover" class="stats-card">
+              <template #header>
+                <div class="stats-header">
+                  <span>充值分红</span>
+                </div>
+              </template>
+              <div class="stats-value info">{{ stats.rechargeAmount ? formatCurrency(stats.rechargeAmount) : '0.00' }}元</div>
+            </el-card>
+          </el-col>
+          <el-col :span="4">
+            <el-card shadow="hover" class="stats-card">
+              <template #header>
+                <div class="stats-header">
+                  <span>覆盖用户</span>
+                </div>
+              </template>
+              <div class="stats-value info">{{ stats.userCount || 0 }}人</div>
+            </el-card>
+          </el-col>
+        </el-row>
+
+        <!-- 奖金池详情 -->
+        <el-card class="mt-4 mb-4">
+          <template #header>
+            <div class="card-header">
+              <span class="fw-bold">奖金池详情</span>
+              <span class="text-muted ml-2">{{ calculateForm.period }} 分红周期</span>
+            </div>
+          </template>
+
+          <el-tabs v-model="activePoolTab" type="card">
+            <el-tab-pane label="VIP招募奖金池" name="vip">
+              <div class="pool-overview">
+                <div class="pool-total">
+                  <div class="pool-title">奖金池总额</div>
+                  <div class="pool-amount">{{ stats.vipPoolAmount ? formatCurrency(stats.vipPoolAmount) : '0.00' }}元</div>
+                </div>
+
+                <div class="pool-distribution">
+                  <div class="distribution-item">
+                    <div class="distribution-title">初级分红池 (40%)</div>
+                    <div class="distribution-amount">{{ stats.vipPoolAmount ? formatCurrency(stats.vipPoolAmount * 0.4) : '0.00' }}元</div>
+                    <div class="distribution-users">
+                      <el-tag size="small" type="info">{{ stats.juniorVipUsers || 0 }}人</el-tag>
+                      <span class="distribution-per-user" v-if="stats.juniorVipUsers > 0">
+                        人均: {{ formatCurrency((stats.vipPoolAmount * 0.4) / stats.juniorVipUsers) }}元
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="distribution-item">
+                    <div class="distribution-title">中级分红池 (30%)</div>
+                    <div class="distribution-amount">{{ stats.vipPoolAmount ? formatCurrency(stats.vipPoolAmount * 0.3) : '0.00' }}元</div>
+                    <div class="distribution-users">
+                      <el-tag size="small" type="warning">{{ stats.middleVipUsers || 0 }}人</el-tag>
+                      <span class="distribution-per-user" v-if="stats.middleVipUsers > 0">
+                        人均: {{ formatCurrency((stats.vipPoolAmount * 0.3) / stats.middleVipUsers) }}元
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="distribution-item">
+                    <div class="distribution-title">高级分红池 (30%)</div>
+                    <div class="distribution-amount">{{ stats.vipPoolAmount ? formatCurrency(stats.vipPoolAmount * 0.3) : '0.00' }}元</div>
+                    <div class="distribution-users">
+                      <el-tag size="small" type="success">{{ stats.seniorVipUsers || 0 }}人</el-tag>
+                      <span class="distribution-per-user" v-if="stats.seniorVipUsers > 0">
+                        人均: {{ formatCurrency((stats.vipPoolAmount * 0.3) / stats.seniorVipUsers) }}元
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="qualification-rules">
+                <div class="rules-title">分红资格标准</div>
+                <div class="rules-content">
+                  <div class="rule-item">
+                    <div class="rule-level">初级资格：</div>
+                    <div class="rule-condition">团队VIP数量 ≥ 3人</div>
+                  </div>
+                  <div class="rule-item">
+                    <div class="rule-level">中级资格：</div>
+                    <div class="rule-condition">团队VIP数量 ≥ 10人</div>
+                  </div>
+                  <div class="rule-item">
+                    <div class="rule-level">高级资格：</div>
+                    <div class="rule-condition">团队VIP数量 ≥ 30人</div>
+                  </div>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="充值分红奖金池" name="recharge">
+              <div class="pool-overview">
+                <div class="pool-total">
+                  <div class="pool-title">奖金池总额</div>
+                  <div class="pool-amount">{{ stats.rechargePoolAmount ? formatCurrency(stats.rechargePoolAmount) : '0.00' }}元</div>
+                </div>
+
+                <div class="pool-distribution">
+                  <div class="distribution-item">
+                    <div class="distribution-title">初级分红池 (40%)</div>
+                    <div class="distribution-amount">{{ stats.rechargePoolAmount ? formatCurrency(stats.rechargePoolAmount * 0.4) : '0.00' }}元</div>
+                    <div class="distribution-users">
+                      <el-tag size="small" type="info">{{ stats.juniorRechargeUsers || 0 }}人</el-tag>
+                      <span class="distribution-per-user" v-if="stats.juniorRechargeUsers > 0">
+                        人均: {{ formatCurrency((stats.rechargePoolAmount * 0.4) / stats.juniorRechargeUsers) }}元
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="distribution-item">
+                    <div class="distribution-title">中级分红池 (30%)</div>
+                    <div class="distribution-amount">{{ stats.rechargePoolAmount ? formatCurrency(stats.rechargePoolAmount * 0.3) : '0.00' }}元</div>
+                    <div class="distribution-users">
+                      <el-tag size="small" type="warning">{{ stats.middleRechargeUsers || 0 }}人</el-tag>
+                      <span class="distribution-per-user" v-if="stats.middleRechargeUsers > 0">
+                        人均: {{ formatCurrency((stats.rechargePoolAmount * 0.3) / stats.middleRechargeUsers) }}元
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="distribution-item">
+                    <div class="distribution-title">高级分红池 (30%)</div>
+                    <div class="distribution-amount">{{ stats.rechargePoolAmount ? formatCurrency(stats.rechargePoolAmount * 0.3) : '0.00' }}元</div>
+                    <div class="distribution-users">
+                      <el-tag size="small" type="success">{{ stats.seniorRechargeUsers || 0 }}人</el-tag>
+                      <span class="distribution-per-user" v-if="stats.seniorRechargeUsers > 0">
+                        人均: {{ formatCurrency((stats.rechargePoolAmount * 0.3) / stats.seniorRechargeUsers) }}元
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="qualification-rules">
+                <div class="rules-title">分红资格标准</div>
+                <div class="rules-content">
+                  <div class="rule-item">
+                    <div class="rule-level">初级资格：</div>
+                    <div class="rule-condition">团队充值设备 ≥ 10台</div>
+                  </div>
+                  <div class="rule-item">
+                    <div class="rule-level">中级资格：</div>
+                    <div class="rule-condition">团队充值设备 ≥ 30台</div>
+                  </div>
+                  <div class="rule-item">
+                    <div class="rule-level">高级资格：</div>
+                    <div class="rule-condition">团队充值设备 ≥ 80台</div>
+                  </div>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </el-card>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="mb-4">
+        <el-button type="primary" @click="handleCalculate">
+          计算分红
+        </el-button>
+        <el-button type="success" @click="showSettleDialog" :disabled="selectedRows.length === 0">
+          结算分红
+        </el-button>
+        <el-button type="info" @click="handleExport">
+          导出数据
+        </el-button>
+      </div>
+
+      <!-- 筛选条件 -->
+      <el-form :inline="true" :model="queryParams" class="form-inline mb-4">
+        <el-form-item label="分红类型">
+          <el-select v-model="queryParams.type" placeholder="全部类型" clearable>
+            <el-option label="VIP招募分红" value="vip" />
+            <el-option label="充值分红" value="recharge" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分红等级">
+          <el-select v-model="queryParams.level" placeholder="全部等级" clearable>
+            <el-option label="初级分红" value="primary" />
+            <el-option label="中级分红" value="middle" />
+            <el-option label="高级分红" value="high" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="结算状态">
+          <el-select v-model="queryParams.status" placeholder="全部状态" clearable>
+            <el-option label="待结算" value="pending" />
+            <el-option label="已结算" value="settled" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分红周期">
+          <el-select v-model="queryParams.period" placeholder="全部周期" clearable>
+            <el-option v-for="period in periods" :key="period" :label="period" :value="period" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="用户ID">
+          <el-input v-model="queryParams.user_id" placeholder="输入用户ID" clearable />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleQuery">
+            查询
+          </el-button>
+          <el-button @click="resetQuery">
+            重置
+          </el-button>
+        </el-form-item>
+      </el-form>
+
+      <!-- 数据表格 -->
+      <el-table
+        v-loading="loading"
+        :data="dividendList"
+        border
+        style="width: 100%"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" />
+        <el-table-column label="ID" prop="id" width="80" />
+        <el-table-column label="用户" min-width="150">
+          <template #default="scope">
+            <div>{{ scope.row.user_name || '未知' }}</div>
+            <small class="text-muted">ID: {{ scope.row.user_id }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column label="分红金额" prop="amount" width="120" align="right">
+          <template #default="scope">
+            <span class="fw-bold">{{ formatCurrency(scope.row.amount) }}元</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="分红周期" prop="period" width="100" />
+        <el-table-column label="分红类型" width="120">
+          <template #default="scope">
+            <div class="dividend-type">
+              <el-tag v-if="scope.row.type === 'vip'" type="primary" effect="dark">VIP招募</el-tag>
+              <el-tag v-else-if="scope.row.type === 'recharge'" type="success" effect="dark">充值</el-tag>
+              <el-tag v-else type="info">未知</el-tag>
+            </div>
+            <div class="dividend-level mt-1">
+              <el-tag v-if="scope.row.level === 'primary'" type="info" size="small">初级</el-tag>
+              <el-tag v-else-if="scope.row.level === 'middle'" type="warning" size="small">中级</el-tag>
+              <el-tag v-else-if="scope.row.level === 'high'" type="success" size="small">高级</el-tag>
+              <el-tag v-else size="small">未知</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="团队数据" min-width="220">
+          <template #default="scope">
+            <div v-if="scope.row.type === 'vip'" class="team-data">
+              <div class="team-data-item">
+                <span class="team-data-label">直推VIP:</span>
+                <span class="team-data-value">{{ scope.row.direct_vip_count || 0 }}</span>
+              </div>
+              <div class="team-data-item">
+                <span class="team-data-label">团队VIP:</span>
+                <span class="team-data-value">{{ scope.row.team_vip_count || 0 }}</span>
+              </div>
+              <div class="team-data-item" v-if="scope.row.month_direct_vip_count">
+                <span class="team-data-label">当月直推:</span>
+                <span class="team-data-value">{{ scope.row.month_direct_vip_count }}</span>
+              </div>
+              <div class="team-data-item" v-if="scope.row.month_team_vip_count">
+                <span class="team-data-label">当月团队:</span>
+                <span class="team-data-value">{{ scope.row.month_team_vip_count }}</span>
+              </div>
+            </div>
+            <div v-else-if="scope.row.type === 'recharge'" class="team-data">
+              <div class="team-data-item">
+                <span class="team-data-label">直推充值:</span>
+                <span class="team-data-value">{{ scope.row.direct_recharge_count || 0 }}</span>
+              </div>
+              <div class="team-data-item">
+                <span class="team-data-label">团队充值:</span>
+                <span class="team-data-value">{{ scope.row.team_recharge_count || 0 }}</span>
+              </div>
+              <div class="team-data-item" v-if="scope.row.month_direct_recharge_count">
+                <span class="team-data-label">当月直推:</span>
+                <span class="team-data-value">{{ scope.row.month_direct_recharge_count }}</span>
+              </div>
+              <div class="team-data-item" v-if="scope.row.month_team_recharge_count">
+                <span class="team-data-label">当月团队:</span>
+                <span class="team-data-value">{{ scope.row.month_team_recharge_count }}</span>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="scope">
+            <el-tag v-if="scope.row.status === 'pending'" type="warning">待结算</el-tag>
+            <el-tag v-else type="success">已结算</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="180">
+          <template #default="scope">
+            {{ formatDate(scope.row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" fixed="right" width="120">
+          <template #default="scope">
+            <el-button
+              type="primary"
+              size="small"
+              @click="viewDetail(scope.row)"
+              link
+            >
+              详情
+            </el-button>
+            <el-button
+              v-if="scope.row.status === 'pending'"
+              type="success"
+              size="small"
+              @click="settleSingle(scope.row)"
+              link
+            >
+              结算
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-if="total > 0"
+          v-model:currentPage="queryParams.page"
+          v-model:page-size="queryParams.per_page"
+          :page-sizes="[10, 20, 30, 50]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
+    </el-card>
+
+    <!-- 结算确认对话框 -->
+    <el-dialog
+      v-model="settleDialog.visible"
+      title="结算确认"
+      width="600px"
+    >
+      <div class="dialog-content">
+        <p>您确定要结算选中的 {{ selectedRows.length }} 条分红记录吗？</p>
+        <p>总金额：{{ formatCurrency(getTotalSelectedAmount()) }}元</p>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="settleDialog.visible = false">取消</el-button>
+          <el-button type="primary" @click="confirmSettle" :loading="settleDialog.loading">
+            确认结算
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 计算分红对话框 -->
+    <el-dialog
+      v-model="calculateDialog.visible"
+      title="计算分红"
+      width="500px"
+    >
+      <el-form :model="calculateForm" label-width="120px">
+        <el-form-item label="分红周期">
+          <el-select v-model="calculateForm.period" placeholder="请选择分红周期">
+            <el-option
+              v-for="(label, value) in periodsForCalculate"
+              :key="value"
+              :label="label"
+              :value="value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分红类型">
+          <el-select v-model="calculateForm.type" placeholder="请选择分红类型">
+            <el-option label="VIP招募分红" value="vip" />
+            <el-option label="充值分红" value="recharge" />
+            <el-option label="全部分红" value="both" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="calculateDialog.visible = false">取消</el-button>
+          <el-button type="primary" @click="confirmCalculate" :loading="calculateDialog.loading">
+            开始计算
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import axios from 'axios';
+import { formatDateTime } from '@/utils/formatters';
+
+// 状态数据
+const loading = ref(false);
+const dividendList = ref([]);
+const total = ref(0);
+const periods = ref([]);
+const selectedRows = ref([]);
+const activePoolTab = ref('vip'); // 默认显示VIP招募奖金池
+const stats = reactive({
+  totalAmount: 0,
+  pendingAmount: 0,
+  settledAmount: 0,
+  vipAmount: 0,
+  rechargeAmount: 0,
+  userCount: 0,
+  // 奖金池数据
+  vipPoolAmount: 0,
+  rechargePoolAmount: 0,
+  juniorVipUsers: 0,
+  middleVipUsers: 0,
+  seniorVipUsers: 0,
+  juniorRechargeUsers: 0,
+  middleRechargeUsers: 0,
+  seniorRechargeUsers: 0
+});
+
+// 查询参数
+const queryParams = reactive({
+  page: 1,
+  per_page: 10,
+  type: '',
+  level: '',
+  status: '',
+  period: '',
+  user_id: ''
+});
+
+// 结算对话框
+const settleDialog = reactive({
+  visible: false,
+  loading: false
+});
+
+// 计算分红对话框
+const calculateDialog = reactive({
+  visible: false,
+  loading: false
+});
+
+// 计算分红表单
+const calculateForm = reactive({
+  period: '',
+  type: 'both'
+});
+
+// 计算分红的周期选项
+const periodsForCalculate = reactive({});
+
+// 获取分红数据
+const getDividendList = async () => {
+  loading.value = true;
+  try {
+    const response = await axios.get('/api/admin/api/users/vip-dividends', { params: queryParams });
+
+    if (response.data.code === 0) {
+      // 新的API响应格式
+      dividendList.value = response.data.data.list || [];
+      total.value = response.data.data.total || 0;
+
+      // 提取统计数据
+      if (response.data.data.stats) {
+        stats.totalAmount = response.data.data.stats.total_amount;
+        stats.pendingAmount = response.data.data.stats.pending_amount;
+        stats.settledAmount = response.data.data.stats.settled_amount;
+        stats.vipAmount = response.data.data.stats.vip_amount;
+        stats.rechargeAmount = response.data.data.stats.recharge_amount;
+        stats.userCount = response.data.data.stats.user_count;
+
+        // 奖金池数据
+        stats.vipPoolAmount = response.data.data.stats.vip_pool_amount || 0;
+        stats.rechargePoolAmount = response.data.data.stats.recharge_pool_amount || 0;
+        stats.juniorVipUsers = response.data.data.stats.junior_vip_users || 0;
+        stats.middleVipUsers = response.data.data.stats.middle_vip_users || 0;
+        stats.seniorVipUsers = response.data.data.stats.senior_vip_users || 0;
+        stats.juniorRechargeUsers = response.data.data.stats.junior_recharge_users || 0;
+        stats.middleRechargeUsers = response.data.data.stats.middle_recharge_users || 0;
+        stats.seniorRechargeUsers = response.data.data.stats.senior_recharge_users || 0;
+      }
+
+      // 提取周期数据
+      if (response.data.data.periods) {
+        periods.value = response.data.data.periods;
+      }
+    } else {
+      ElMessage.error(response.data.msg || '获取分红数据失败');
+    }
+  } catch (error) {
+    console.error('获取分红数据失败:', error);
+    ElMessage.error(error.response?.data?.msg || '获取分红数据失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 获取计算分红的周期选项
+const getCalculatePeriods = () => {
+  // 生成最近12个月的选项
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const month = date.getMonth() + 1;
+    const year = date.getFullYear();
+    const value = `${year}-${month < 10 ? '0' + month : month}`;
+    const label = `${year}年${month}月`;
+    periodsForCalculate[value] = label;
+  }
+
+  // 默认选择当前月份
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  calculateForm.period = `${currentYear}-${currentMonth < 10 ? '0' + currentMonth : currentMonth}`;
+};
+
+// 初始化
+onMounted(() => {
+  getDividendList();
+  getCalculatePeriods();
+});
+
+// 表格选择项变化
+const handleSelectionChange = (selection) => {
+  selectedRows.value = selection.filter(row => row.status === 'pending');
+};
+
+// 查询操作
+const handleQuery = () => {
+  queryParams.page = 1;
+  getDividendList();
+};
+
+// 重置查询参数
+const resetQuery = () => {
+  Object.assign(queryParams, {
+    page: 1,
+    per_page: 10,
+    type: '',
+    level: '',
+    status: '',
+    period: '',
+    user_id: ''
+  });
+  getDividendList();
+};
+
+// 处理分页大小变化
+const handleSizeChange = (size) => {
+  queryParams.per_page = size;
+  getDividendList();
+};
+
+// 处理页码变化
+const handleCurrentChange = (page) => {
+  queryParams.page = page;
+  getDividendList();
+};
+
+// 格式化金额
+const formatCurrency = (value) => {
+  return parseFloat(value).toFixed(2);
+};
+
+// 格式化日期
+const formatDate = (dateString) => {
+  return formatDateTime(dateString);
+};
+
+// 查看详情
+const viewDetail = (row) => {
+  window.location.href = `/api/admin/api/users/vip-dividends/show/${row.id}`;
+};
+
+// 结算单条记录
+const settleSingle = (row) => {
+  ElMessageBox.confirm(`确定要结算该分红记录吗？金额：${formatCurrency(row.amount)}元`, '提示', {
+    confirmButtonText: '确认',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    settleDividends([row.id]);
+  }).catch(() => {});
+};
+
+// 显示批量结算对话框
+const showSettleDialog = () => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请至少选择一条待结算的记录');
+    return;
+  }
+  settleDialog.visible = true;
+};
+
+// 计算选中记录的总金额
+const getTotalSelectedAmount = () => {
+  return selectedRows.value.reduce((sum, row) => sum + parseFloat(row.amount), 0);
+};
+
+// 确认结算操作
+const confirmSettle = () => {
+  const ids = selectedRows.value.map(row => row.id);
+  settleDividends(ids);
+};
+
+// 执行结算API调用
+const settleDividends = async (ids) => {
+  settleDialog.loading = true;
+  try {
+    const response = await axios.post('/api/admin/api/users/vip-dividends/settle', { dividend_ids: ids });
+    if (response.data.code === 0) {
+      ElMessage.success(response.data.msg);
+      settleDialog.visible = false;
+      getDividendList();
+    } else {
+      ElMessage.error(response.data.msg || '结算失败');
+    }
+  } catch (error) {
+    console.error('结算失败:', error);
+    ElMessage.error(error.response?.data?.msg || '结算失败，请稍后重试');
+  } finally {
+    settleDialog.loading = false;
+  }
+};
+
+// 显示计算分红对话框
+const handleCalculate = () => {
+  calculateDialog.visible = true;
+};
+
+// 确认计算分红
+const confirmCalculate = async () => {
+  if (!calculateForm.period) {
+    ElMessage.warning('请选择分红周期');
+    return;
+  }
+
+  calculateDialog.loading = true;
+  try {
+    const response = await axios.post('/api/admin/api/users/vip-dividends/calculate', calculateForm);
+
+    // 检查响应数据
+    if (response.data && response.data.code === 0) {
+      ElMessage.success(response.data.msg || '分红计算任务已完成');
+      console.log('分红计算结果:', response.data.data);
+      calculateDialog.visible = false;
+      getDividendList();
+    } else {
+      ElMessage.error(response.data?.msg || '分红计算失败');
+    }
+  } catch (error) {
+    console.error('计算分红失败:', error);
+    ElMessage.error(error.response?.data?.msg || '计算分红失败，请稍后重试');
+  } finally {
+    calculateDialog.loading = false;
+  }
+};
+
+// 导出数据
+const handleExport = () => {
+  const params = new URLSearchParams(queryParams);
+  window.location.href = `/api/admin/api/users/vip-dividends/export?${params.toString()}`;
+};
+</script>
+
+<style scoped>
+.stats-panel {
+  margin-bottom: 20px;
+}
+
+.stats-card {
+  text-align: center;
+}
+
+.stats-header {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.stats-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #409EFF;
+}
+
+.stats-value.warning {
+  color: #E6A23C;
+}
+
+.stats-value.success {
+  color: #67C23A;
+}
+
+.stats-value.info {
+  color: #909399;
+}
+
+.form-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.text-muted {
+  color: #909399;
+  font-size: 12px;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  text-align: right;
+}
+
+.fw-bold {
+  font-weight: bold;
+}
+
+.el-pagination {
+  justify-content: right;
+}
+
+/* 奖金池样式 */
+.pool-card {
+  margin-top: 10px;
+}
+
+.pool-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.pool-amount {
+  font-size: 24px;
+  font-weight: bold;
+  color: #409EFF;
+  flex: 0 0 30%;
+}
+
+.pool-details {
+  flex: 0 0 65%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pool-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pool-label {
+  color: #606266;
+}
+
+.pool-value {
+  font-weight: bold;
+  color: #303133;
+}
+
+.mt-4 {
+  margin-top: 20px;
+}
+
+.mb-4 {
+  margin-bottom: 20px;
+}
+
+.mt-1 {
+  margin-top: 5px;
+}
+
+.ml-2 {
+  margin-left: 10px;
+}
+
+/* 奖金池详情样式 */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pool-overview {
+  display: flex;
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.pool-total {
+  flex: 0 0 30%;
+  padding-right: 20px;
+  border-right: 1px solid #ebeef5;
+}
+
+.pool-title {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 10px;
+}
+
+.pool-distribution {
+  flex: 0 0 70%;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.distribution-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border-radius: 4px;
+  background-color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.distribution-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #303133;
+}
+
+.distribution-amount {
+  font-size: 18px;
+  font-weight: bold;
+  color: #409EFF;
+  margin-bottom: 5px;
+}
+
+.distribution-users {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.distribution-per-user {
+  font-size: 12px;
+  color: #909399;
+}
+
+.qualification-rules {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.rules-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #303133;
+}
+
+.rules-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rule-item {
+  display: flex;
+  align-items: center;
+}
+
+.rule-level {
+  font-weight: bold;
+  width: 100px;
+  color: #606266;
+}
+
+.rule-condition {
+  color: #303133;
+}
+
+/* 团队数据样式 */
+.team-data {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.team-data-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.team-data-label {
+  color: #606266;
+  font-size: 13px;
+}
+
+.team-data-value {
+  font-weight: bold;
+  color: #303133;
+}
+</style>

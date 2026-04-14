@@ -1,0 +1,382 @@
+<template>
+  <div class="app-container">
+    <el-card class="box-card">
+      <template #header>
+        <div class="card-header">
+          <span>用户登录日志</span>
+          <el-button style="float: right; padding: 3px 0" type="text" @click="refreshData">刷新</el-button>
+        </div>
+      </template>
+      
+      <!-- 搜索过滤 -->
+      <div class="filter-container">
+        <el-input
+          v-model="listQuery.keyword"
+          placeholder="用户名/手机号/IP"
+          clearable
+          style="width: 200px;"
+          class="filter-item"
+          @keyup.enter="handleFilter"
+        />
+        <el-select
+          v-model="listQuery.loginMethod"
+          placeholder="登录方式"
+          clearable
+          style="width: 140px"
+          class="filter-item"
+        >
+          <el-option label="密码登录" value="password" />
+          <el-option label="微信登录" value="wechat" />
+          <el-option label="验证码登录" value="code" />
+          <el-option label="绑定手机号" value="bind_phone" />
+          <el-option label="自动绑定" value="auto_bind" />
+        </el-select>
+        <el-select
+          v-model="listQuery.status"
+          placeholder="登录状态"
+          clearable
+          style="width: 140px"
+          class="filter-item"
+        >
+          <el-option label="成功" value="success" />
+          <el-option label="失败" value="failed" />
+        </el-select>
+        <el-date-picker
+          v-model="dateRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          value-format="YYYY-MM-DD"
+          class="filter-item"
+          style="width: 320px"
+        />
+        <el-button
+          class="filter-item"
+          type="primary"
+          :icon="Search"
+          @click="handleFilter"
+        >
+          搜索
+        </el-button>
+      </div>
+      
+      <!-- 数据表格 -->
+      <el-table
+        v-loading="listLoading"
+        :data="list"
+        border
+        fit
+        highlight-current-row
+        style="width: 100%;"
+      >
+        <el-table-column label="ID" prop="id" align="center" width="80" />
+        <el-table-column label="用户" min-width="120">
+          <template #default="scope">
+            <el-popover
+              placement="right"
+              :width="200"
+              trigger="hover"
+              v-if="scope.row.user_id"
+            >
+              <template #content>
+                <div>
+                  <p><strong>用户ID:</strong> {{ scope.row.user_id }}</p>
+                  <p v-if="scope.row.user_info"><strong>手机号:</strong> {{ scope.row.user_info.phone || '-' }}</p>
+                  <p v-if="scope.row.user_info"><strong>注册时间:</strong> {{ formatDate(scope.row.user_info.created_at) }}</p>
+                </div>
+              </template>
+              <span class="user-link">{{ getUserName(scope.row) }}</span>
+            </el-popover>
+            <span v-else>{{ getUserName(scope.row) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="登录方式" width="120" align="center">
+          <template #default="scope">
+            <el-tag :type="getLoginMethodTag(scope.row.login_method)">
+              {{ getLoginMethodLabel(scope.row.login_method) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="登录状态" width="100" align="center">
+          <template #default="scope">
+            <el-tag :type="scope.row.status === 'success' ? 'success' : 'danger'">
+              {{ scope.row.status === 'success' ? '成功' : '失败' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="IP地址" width="140" align="center" prop="ip_address" />
+        <el-table-column label="设备信息" min-width="200">
+          <template #default="scope">
+            <el-popover
+              placement="top"
+              :width="300"
+              trigger="hover"
+              v-if="scope.row.user_agent"
+            >
+              <template #content>
+                <div style="max-height: 200px; overflow-y: auto;">
+                  <p><strong>完整用户代理:</strong></p>
+                  <p style="word-break: break-all;">{{ scope.row.user_agent }}</p>
+                </div>
+              </template>
+              <el-tag size="small" type="info">
+                {{ formatUserAgent(scope.row.user_agent) }}
+              </el-tag>
+            </el-popover>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="消息" min-width="180">
+          <template #default="scope">
+            <span v-if="scope.row.message">{{ scope.row.message }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="登录时间" width="160" align="center" prop="created_at" />
+      </el-table>
+      
+      <!-- 分页器 -->
+      <div class="pagination-container">
+        <el-pagination
+          background
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+          :current-page="listQuery.page"
+          :page-sizes="[10, 20, 30, 50, 100]"
+          :page-size="listQuery.limit"
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="total"
+        />
+      </div>
+    </el-card>
+  </div>
+</template>
+
+<script>
+import { ref, reactive, onMounted, watch } from 'vue';
+import { Search } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import axios from 'axios';
+import moment from 'moment';
+
+export default {
+  name: 'LoginLogs',
+  setup() {
+    const list = ref([]);
+    const total = ref(0);
+    const listLoading = ref(true);
+    const dateRange = ref([]);
+    
+    const listQuery = reactive({
+      page: 1,
+      limit: 20,
+      keyword: '',
+      loginMethod: '',
+      status: '',
+      startDate: '',
+      endDate: ''
+    });
+    
+    // 获取登录日志列表
+    const getList = async () => {
+      listLoading.value = true;
+      
+      try {
+        // 处理日期范围
+        if (dateRange.value && dateRange.value.length === 2) {
+          listQuery.startDate = dateRange.value[0];
+          listQuery.endDate = dateRange.value[1];
+        } else {
+          listQuery.startDate = '';
+          listQuery.endDate = '';
+        }
+        
+        const response = await axios.get('/api/system/login-logs', { params: listQuery });
+        
+        if (response.data.code === 0) {
+          list.value = response.data.data.list;
+          total.value = response.data.data.total;
+        } else {
+          ElMessage.error(response.data.message || '获取登录日志失败');
+        }
+      } catch (error) {
+        console.error('获取登录日志失败', error);
+        ElMessage.error('获取登录日志失败');
+      } finally {
+        listLoading.value = false;
+      }
+    };
+    
+    // 获取登录方式标签类型
+    const getLoginMethodTag = (method) => {
+      const methodTags = {
+        password: 'warning',
+        wechat: 'success',
+        code: 'primary',
+        bind_phone: 'info',
+        auto_bind: 'success'
+      };
+      
+      return methodTags[method] || 'info';
+    };
+    
+    // 获取登录方式显示文本
+    const getLoginMethodLabel = (method) => {
+      const methodLabels = {
+        password: '密码登录',
+        wechat: '微信登录',
+        code: '验证码登录',
+        bind_phone: '绑定手机号',
+        auto_bind: '自动绑定'
+      };
+      
+      return methodLabels[method] || method;
+    };
+    
+    // 获取用户显示名称
+    const getUserName = (row) => {
+      if (row.user_info) {
+        return row.user_info.name || row.user_info.wechat_nickname || row.user_info.phone || `用户${row.user_id}`;
+      } else if (row.user_id) {
+        return `用户${row.user_id}`;
+      } else {
+        return '未知用户';
+      }
+    };
+    
+    // 格式化日期
+    const formatDate = (date) => {
+      if (!date) return '-';
+      return moment(date).format('YYYY-MM-DD HH:mm:ss');
+    };
+    
+    // 格式化用户代理字符串
+    const formatUserAgent = (userAgent) => {
+      if (!userAgent) return '-';
+      
+      // 提取设备和浏览器基本信息
+      let result = '未知设备';
+      
+      if (userAgent.includes('iPhone')) {
+        result = 'iPhone';
+      } else if (userAgent.includes('iPad')) {
+        result = 'iPad';
+      } else if (userAgent.includes('Android')) {
+        result = 'Android';
+      } else if (userAgent.includes('Windows')) {
+        result = 'Windows';
+      } else if (userAgent.includes('Macintosh')) {
+        result = 'Mac';
+      } else if (userAgent.includes('Linux')) {
+        result = 'Linux';
+      }
+      
+      if (userAgent.includes('MicroMessenger')) {
+        result += ' 微信';
+      } else if (userAgent.includes('Chrome')) {
+        result += ' Chrome';
+      } else if (userAgent.includes('Safari')) {
+        result += ' Safari';
+      } else if (userAgent.includes('Firefox')) {
+        result += ' Firefox';
+      } else if (userAgent.includes('MSIE') || userAgent.includes('Trident')) {
+        result += ' IE';
+      }
+      
+      return result;
+    };
+    
+    // 刷新数据
+    const refreshData = () => {
+      getList();
+    };
+    
+    // 过滤数据
+    const handleFilter = () => {
+      listQuery.page = 1;
+      getList();
+    };
+    
+    // 改变每页大小
+    const handleSizeChange = (val) => {
+      listQuery.limit = val;
+      getList();
+    };
+    
+    // 改变页码
+    const handleCurrentChange = (val) => {
+      listQuery.page = val;
+      getList();
+    };
+    
+    // 监听日期范围变化
+    watch(dateRange, () => {
+      if (dateRange.value && dateRange.value.length === 2) {
+        listQuery.startDate = dateRange.value[0];
+        listQuery.endDate = dateRange.value[1];
+      } else {
+        listQuery.startDate = '';
+        listQuery.endDate = '';
+      }
+    });
+    
+    onMounted(() => {
+      getList();
+    });
+    
+    return {
+      list,
+      total,
+      listLoading,
+      listQuery,
+      dateRange,
+      Search,
+      getList,
+      refreshData,
+      handleFilter,
+      handleSizeChange,
+      handleCurrentChange,
+      getLoginMethodTag,
+      getLoginMethodLabel,
+      getUserName,
+      formatDate,
+      formatUserAgent
+    };
+  }
+};
+</script>
+
+<style scoped>
+.filter-container {
+  padding-bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-item {
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user-link {
+  color: #409EFF;
+  cursor: pointer;
+}
+
+.user-link:hover {
+  text-decoration: underline;
+}
+</style> 

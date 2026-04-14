@@ -1,0 +1,491 @@
+import { createRouter, createWebHistory, createWebHashHistory } from 'vue-router';
+import { h } from 'vue';
+import routes from '../routes';
+import { fixRouteComponents } from '../utils/routeHelper';
+import RouterView from '../views/RouterView.vue';
+
+// 使用动态导入优化加载性能
+const Login = () => import('../views/Login.vue');
+const Layout = () => import('../views/layout/index.vue'); // 使用完整布局组件
+const Dashboard = () => import('../views/Dashboard.vue');
+const NotFound = () => import('../views/errors/404.vue');
+
+// 修改基础URL路径
+const BASE_URL = '/admin/';
+
+// 添加全局变量，供其他模块使用
+window.BASE_URL = BASE_URL;
+
+// 修复组件引用问题
+const fixedRoutes = fixRouteComponents(routes);
+
+// 添加一个通配符路由处理404
+fixedRoutes.push({
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: NotFound,
+    meta: { requiresAuth: false }
+});
+
+// 路由配置
+const routesConfig = [
+    {
+        path: '/login',
+        name: 'Login',
+        component: Login,
+        meta: { requiresAuth: false }
+    },
+    {
+        path: '/',
+        component: Layout,
+        redirect: '/dashboard',
+        meta: { requiresAuth: true },
+        children: [
+            {
+                path: 'dashboard',
+                name: 'Dashboard',
+                component: Dashboard,
+                meta: { title: '控制面板', icon: 'dashboard' }
+            },
+            // 用户管理
+            {
+                path: 'users',
+                name: 'Users',
+                component: () => import('../views/users/UserLayout.vue'),
+                meta: { title: '用户管理', icon: 'user' },
+                redirect: { name: 'AdminUsers' },
+                children: [
+                    {
+                        path: 'admins',
+                        name: 'AdminUsers',
+                        component: () => import('../views/users/admins/List.vue'),
+                        meta: { title: '后台管理员', icon: 'user-filled' }
+                    },
+                    {
+                        path: 'app-users',
+                        name: 'AppUsers',
+                        component: () => import('../views/users/app-users/List.vue'),
+                        meta: { title: 'APP用户', icon: 'user' }
+                    },
+
+                    // 业务员管理
+                    {
+                        path: 'salesmen',
+                        name: 'SalesmenList',
+                        component: () => import('../views/users/salesmen/List.vue'),
+                        meta: { title: '业务员管理', icon: 'briefcase' }
+                    },
+                    {
+                        path: 'salesmen/create',
+                        name: 'SalesmenCreate',
+                        component: () => import('../views/users/salesmen/Create.vue'),
+                        meta: { title: '新增业务员', activeMenu: '/users/salesmen' },
+                        hidden: true
+                    },
+                    {
+                        path: 'salesmen/:id',
+                        name: 'SalesmenDetail',
+                        component: () => import('../views/users/salesmen/Show.vue'),
+                        meta: { title: '业务员详情', activeMenu: '/users/salesmen' },
+                        hidden: true
+                    },
+                    {
+                        path: 'salesmen/:id/edit',
+                        name: 'SalesmenEdit',
+                        component: () => import('../views/users/salesmen/Edit.vue'),
+                        meta: { title: '编辑业务员', activeMenu: '/users/salesmen' },
+                        hidden: true
+                    },
+                    {
+                        path: 'salesmen/:id/sales',
+                        name: 'SalesmenSales',
+                        component: () => import('../views/users/salesmen/sales/List.vue'),
+                        meta: { title: '销售记录', activeMenu: '/users/salesmen' },
+                        hidden: true
+                    },
+                    {
+                        path: 'salesmen/:id/commissions',
+                        name: 'SalesmenCommissions',
+                        component: () => import('../views/users/salesmen/commissions/List.vue'),
+                        meta: { title: '佣金记录', activeMenu: '/users/salesmen' },
+                        hidden: true
+                    },
+                    {
+                        path: 'salesmen/:id/targets',
+                        name: 'SalesmenTargets',
+                        component: () => import('../views/users/salesmen/targets/List.vue'),
+                        meta: { title: '目标设置', activeMenu: '/users/salesmen' },
+                        hidden: true
+                    },
+                    {
+                        path: 'salesmen/:id/customers',
+                        name: 'SalesmenCustomers',
+                        component: () => import('../views/users/salesmen/customers/List.vue'),
+                        meta: { title: '客户列表', activeMenu: '/users/salesmen' },
+                        hidden: true
+                    },
+                    // 业务员统计
+                    {
+                        path: 'salesman-stats',
+                        name: 'SalesmanStats',
+                        component: () => import('../views/users/salesman-stats/Index.vue'),
+                        meta: { title: '业务员统计', icon: 'data-analysis' }
+                    },
+                    // VIP会员
+                    {
+                        path: 'vip-dividends',
+                        name: 'VipDividends',
+                        component: () => import('../views/users/vip-dividends/Index.vue'),
+                        meta: { title: 'VIP会员', icon: 'gold-medal' }
+                    },
+                ]
+            },
+            // 商城管理
+            {
+                path: 'mall',
+                name: 'Mall',
+                component: () => import('../views/mall/MallLayout.vue'),
+                meta: { title: '商城管理', icon: 'shopping-cart' },
+                redirect: { name: 'Products' },
+                children: [
+                    {
+                        path: 'categories',
+                        name: 'Categories',
+                        component: () => import('../views/mall/categories/List.vue'),
+                        meta: { title: '商品分类', icon: 'folder' }
+                    },
+                    {
+                        path: 'products',
+                        name: 'Products',
+                        component: () => import('../views/mall/products/List.vue'),
+                        meta: { title: '商品管理', icon: 'goods' }
+                    },
+                    {
+                        path: 'orders',
+                        name: 'Orders',
+                        component: () => import('../views/mall/orders/List.vue'),
+                        meta: { title: '订单管理', icon: 'list' }
+                    },
+                    {
+                        path: 'orders/:id',
+                        component: () => import('../views/mall/orders/Detail.vue'),
+                        name: 'OrderDetail',
+                        meta: { title: '订单详情', activeMenu: '/mall/orders' },
+                        hidden: true
+                    },
+                    {
+                        path: 'refunds',
+                        component: () => import('../views/mall/orders/Refunds.vue'),
+                        name: 'Refunds',
+                        meta: { title: '退款管理', icon: 'money' }
+                    },
+                    {
+                        path: 'banners',
+                        name: 'Banners',
+                        component: () => import('../views/mall/banners/List.vue'),
+                        meta: { title: '轮播图管理', icon: 'picture' }
+                    }
+                ]
+            },
+            // 取水点管理
+            {
+                path: 'water-points',
+                name: 'WaterPoints',
+                component: () => import('../views/water-points/List.vue'),
+                meta: { title: '取水点列表', icon: 'location' }
+            },
+            // 设备管理
+            {
+                path: 'devices',
+                name: 'HQDevices',
+                component: () => import('../views/devices/List.vue'),
+                meta: { title: '总部设备', icon: 'monitor' }
+            },
+            // 点点够设备管理
+            {
+                path: 'tapp-devices',
+                component: () => import('@/views/devices/TappDeviceList.vue'),
+                name: 'TappDeviceList',
+                meta: { title: '点点够设备管理', icon: 'el-icon-water-cup' }
+            },
+            {
+                path: 'tapp-devices/:id',
+                component: () => import('@/views/devices/Detail.vue'),
+                name: 'TappDeviceDetail',
+                hidden: true,
+                meta: { title: '设备详情', activeMenu: '/tapp-devices' }
+            },
+            {
+                path: 'tapp-devices/:id/edit',
+                component: () => import('@/views/devices/Edit.vue'),
+                name: 'TappDeviceEdit',
+                hidden: true,
+                meta: { title: '编辑设备', activeMenu: '/tapp-devices' }
+            },
+            // 渠道商管理
+            {
+                path: 'agents',
+                name: 'Agents',
+                component: () => import('../views/agents/List.vue'),
+                meta: { title: '渠道商列表', icon: 'user-group' }
+            },
+            // 商户管理
+            {
+                path: 'merchants',
+                name: 'Merchants',
+                component: () => import('../views/merchants/List.vue'),
+                meta: { title: '商户列表', icon: 'shop' }
+            },
+            // 工程师管理
+            {
+                path: 'engineers',
+                name: 'Engineers',
+                component: () => import('../views/engineers/List.vue'),
+                meta: { title: '工程师列表', icon: 'tools' }
+            },
+            // 安装管理
+            {
+                path: 'installation',
+                name: 'Installation',
+                component: () => import('../views/installation/InstallationLayout.vue'),
+                meta: { title: '安装管理', icon: 'Van' }, // 设置菜单图标，可以使用 Vant Icons
+                redirect: { name: 'InstallationBookings' }, // 默认重定向到列表页
+                children: [
+                    {
+                        path: 'booking',
+                        name: 'InstallationBookings',
+                        component: () => import('../views/installation/Booking.vue'),
+                        meta: { title: '安装预约列表', icon: 'Tickets' } // 设置子菜单图标
+                    },
+                    {
+                        path: 'booking/:id',
+                        name: 'InstallationBookingDetail', // 确认名称与 Booking.vue 中使用的一致
+                        component: () => import('../views/installation/BookingDetail.vue'),
+                        meta: { title: '预约详情', activeMenu: '/installation/booking' }, // 高亮父菜单
+                        hidden: true // 不在侧边栏直接显示
+                    },
+                    // 工程师管理
+                    {
+                        path: 'engineers',
+                        name: 'InstallationEngineers',
+                        component: () => import('../views/installation/Engineers.vue'),
+                        meta: { title: '工程师管理', icon: 'User' }
+                    },
+                    // 安装统计页面
+                    {
+                        path: 'statistics',
+                        name: 'InstallationStatistics',
+                        component: () => import('../views/installation/Statistics.vue'),
+                        meta: { title: '安装统计', icon: 'DataAnalysis' }
+                    }
+                ]
+            },
+            // 系统设置
+            {
+                path: 'settings',
+                name: 'Settings',
+                component: () => import('../views/settings/Index.vue'),
+                meta: { title: '系统设置', icon: 'setting' }
+            },
+            // 系统管理
+            {
+                path: 'system',
+                name: 'System',
+                component: () => import('../views/system/SystemLayout.vue'),
+                meta: { title: '系统管理', icon: 'tools' },
+                redirect: { name: 'MenuManagement' },
+                children: [
+                    {
+                        path: 'menu',
+                        name: 'MenuManagement',
+                        component: () => import('../views/system/menu/List.vue'),
+                        meta: { title: '菜单管理', icon: 'menu' }
+                    },
+                    {
+                        path: 'login-logs',
+                        name: 'LoginLogs',
+                        component: () => import('../views/system/LoginLogs.vue'),
+                        meta: { title: '登录日志', icon: 'list' }
+                    },
+                    {
+                        path: 'nav',
+                        name: 'NavManagement',
+                        component: () => import('../views/system/nav/Index.vue'),
+                        meta: { title: 'APP导航管理', icon: 'compass' }
+                    },
+                    {
+                        path: 'roles',
+                        name: 'RoleManagement',
+                        component: () => import('../views/system/roles/List.vue'),
+                        meta: { title: '角色管理', icon: 'user-filled' }
+                    },
+                    {
+                        path: 'permissions',
+                        name: 'PermissionManagement',
+                        component: () => import('../views/system/permissions/List.vue'),
+                        meta: { title: '权限管理', icon: 'lock' }
+                    }
+                ]
+            },
+            // APP导航管理（单独菜单项）
+            {
+                path: 'app-navigation',
+                name: 'AppNavigation',
+                component: () => import('../views/system/nav/Index.vue'),
+                meta: { title: 'APP导航管理', icon: 'compass' },
+                redirect: { path: '/system/nav' }
+            },
+            // 短信管理
+            {
+                path: 'sms',
+                component: () => import('../views/system/sms_new/SmsLayout.vue'),
+                name: 'SmsManagement',
+                meta: {
+                    title: '短信管理',
+                    icon: 'Message'
+                },
+                redirect: { name: 'SmsLogs' }, // 默认重定向到日志页面
+                children: [
+                    {
+                        path: 'logs',
+                        name: 'SmsLogs',
+                        component: () => import('../views/system/sms_new/Logs.vue'),
+                        meta: {
+                            title: '短信日志',
+                            renderInSmsLayout: true
+                        }
+                    },
+                    {
+                        path: 'statistics',
+                        name: 'SmsStatistics',
+                        component: () => import('../views/system/sms_new/Statistics.vue'),
+                        meta: {
+                            title: '短信统计分析',
+                            renderInSmsLayout: true
+                        }
+                    },
+                    {
+                        path: 'codes',
+                        name: 'SmsCodes',
+                        component: () => import('../views/system/sms_new/Codes.vue'),
+                        meta: {
+                            title: '验证码管理',
+                            renderInSmsLayout: true
+                        }
+                    }
+                ]
+            },
+        ]
+    },
+    // 404页面
+    {
+        path: '/:pathMatch(.*)*',
+        name: 'NotFound',
+        component: NotFound,
+        meta: { requiresAuth: false }
+    }
+];
+
+// 创建路由实例
+const router = createRouter({
+    // 使用Hash模式，确保URL中包含#符号
+    history: createWebHashHistory(BASE_URL),
+    routes: routesConfig,
+    // 修改滚动行为，跳转时自动回到顶部
+    scrollBehavior() {
+        return { top: 0 }
+    }
+});
+
+// 全局路由守卫
+router.beforeEach((to, from, next) => {
+    // 记录当前路由到localStorage，以便页面刷新时恢复
+    localStorage.setItem('lastRoute', to.fullPath);
+
+    // 特殊处理业务员相关路由
+    if (to.path.includes('/users/salesmen') || to.path.includes('/users/salesman-stats')) {
+        console.log('业务员相关路由:', to.path);
+        // 检查是否有有效token
+        const token = localStorage.getItem('token');
+        if (!token) {
+            console.log('访问业务员相关路由但没有token，重定向到登录页');
+            localStorage.removeItem('user');
+            next({
+                path: '/login',
+                query: { redirect: to.fullPath }
+            });
+            return;
+        }
+    }
+
+    // 检查路由是否需要认证
+    const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
+    const isLoggedIn = localStorage.getItem('token');
+
+    if (requiresAuth && !isLoggedIn) {
+        // 清除可能存在的无效凭证
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+
+        console.log('需要认证但没有token，重定向到登录页');
+        // 未登录，重定向到登录页，并保存目标路径
+        next({
+            path: '/login',
+            query: { redirect: to.fullPath }
+        });
+    } else {
+        // 如果已登录且访问登录页，重定向到首页
+        if (to.path === '/login' && localStorage.getItem('token')) {
+            next({ path: '/' });
+        } else {
+            // 处理组件加载问题
+            // 如果路由定义的组件不存在，使用RouterView作为占位符
+            if (to.matched.length > 0) {
+                const matchedComponents = to.matched.map(record => record.components.default);
+                const hasInvalidComponent = matchedComponents.some(comp =>
+                    !comp || typeof comp === 'undefined' || (typeof comp === 'string' && comp.includes('||'))
+                );
+
+                if (hasInvalidComponent) {
+                    console.warn('检测到无效组件，使用RouterView作为占位符');
+                    to.matched.forEach(record => {
+                        if (!record.components.default || typeof record.components.default === 'undefined' ||
+                            (typeof record.components.default === 'string' && record.components.default.includes('||'))) {
+                            record.components.default = RouterView;
+                        }
+                    });
+                }
+            }
+
+            next();
+        }
+    }
+});
+
+// 处理路由错误
+router.onError((error) => {
+    console.error('路由错误:', error);
+
+    // 检查是否是401错误
+    if (error.status === 401 || (error.response && error.response.status === 401)) {
+        console.log('检测到401未授权错误，清除登录状态并重定向到登录页');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        router.push('/login');
+        return;
+    }
+
+    // 尝试恢复到上一个成功的路由
+    const lastRoute = localStorage.getItem('lastRoute');
+    if (lastRoute && router.currentRoute.value.path !== lastRoute) {
+        router.push('/dashboard');
+    }
+
+    // 尝试处理常见的路由错误
+    if (error.name === 'ChunkLoadError' || error.code === 'MODULE_NOT_FOUND') {
+        console.warn('模块加载失败，尝试刷新页面');
+        window.location.reload();
+    }
+});
+
+export default router;

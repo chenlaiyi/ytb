@@ -1,0 +1,96 @@
+import axios from 'axios';
+import { getToken, clearAuth } from '@/utils/auth';
+import router from '@/router';
+import { ElMessage } from 'element-plus';
+
+// 创建axios实例
+const service = axios.create({
+  baseURL: '/api',
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest'
+  }
+});
+
+// 请求拦截器
+service.interceptors.request.use(
+  config => {
+    // 如果有token，添加到请求头
+    const token = getToken();
+    if (token) {
+      config.headers['Authorization'] = ;
+    }
+    return config;
+  },
+  error => {
+    console.error('请求错误', error);
+    return Promise.reject(error);
+  }
+);
+
+// 响应拦截器
+service.interceptors.response.use(
+  response => {
+    const res = response.data;
+    
+    // 如果返回的状态码不是0，说明接口出错了
+    if (res.code !== 0 && res.code !== undefined) {
+      ElMessage.error(res.message || '系统错误');
+      
+      // 如果是401，说明token无效，需要重新登录
+      if (res.code === 401) {
+        handleAuthError();
+      }
+      
+      return Promise.reject(new Error(res.message || '系统错误'));
+    }
+    
+    return res;
+  },
+  error => {
+    console.error('响应错误', error);
+    
+    // 处理HTTP错误状态码
+    if (error.response) {
+      const { status, data } = error.response;
+      
+      // 处理401错误
+      if (status === 401) {
+        handleAuthError();
+      } else if (status === 403) {
+        ElMessage.error('没有权限访问该资源');
+      } else if (status === 404) {
+        ElMessage.error('请求的资源不存在');
+      } else if (status === 500) {
+        ElMessage.error('服务器错误，请联系管理员');
+      } else {
+        ElMessage.error(data.message || );
+      }
+    } else if (error.request) {
+      ElMessage.error('网络错误，无法连接到服务器');
+    } else {
+      ElMessage.error(error.message || '请求过程中发生未知错误');
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+// 处理认证错误
+function handleAuthError() {
+  // 清除认证信息
+  clearAuth();
+  
+  // 如果不是登录页面，重定向到登录页
+  if (router.currentRoute.value.path !== '/login') {
+    ElMessage.error('登录已过期，请重新登录');
+    router.push({
+      path: '/login',
+      query: { redirect: router.currentRoute.value.fullPath }
+    });
+  }
+}
+
+export default service;

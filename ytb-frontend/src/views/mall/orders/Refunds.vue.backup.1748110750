@@ -1,0 +1,651 @@
+<template>
+  <div class="app-container">
+    <div class="filter-container">
+      <el-input
+        v-model="listQuery.keyword"
+        placeholder="退款单号/联系电话"
+        style="width: 200px;"
+        class="filter-item"
+        @keyup.enter="handleFilter"
+      />
+      <el-select
+        v-model="listQuery.verify_status"
+        placeholder="审核状态"
+        clearable
+        style="width: 120px"
+        class="filter-item"
+      >
+        <el-option
+          v-for="item in verifyStatusOptions"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
+      </el-select>
+      <el-select
+        v-model="listQuery.aftermarket_type"
+        placeholder="退款类型"
+        clearable
+        style="width: 120px"
+        class="filter-item"
+      >
+        <el-option
+          v-for="item in refundTypeOptions"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
+      </el-select>
+      <el-date-picker
+        v-model="dateRange"
+        type="daterange"
+        range-separator="至"
+        start-placeholder="开始日期"
+        end-placeholder="结束日期"
+        value-format="YYYY-MM-DD"
+        class="filter-item date-picker"
+        @change="handleDateRangeChange"
+      />
+      <el-button class="filter-item" type="primary" icon="Search" @click="handleFilter">
+        搜索
+      </el-button>
+    </div>
+
+    <el-table
+      v-loading="listLoading"
+      :data="list"
+      element-loading-text="加载中..."
+      border
+      fit
+      highlight-current-row
+      style="width: 100%;"
+    >
+      <el-table-column prop="id" label="ID" width="80" align="center" />
+      <el-table-column prop="aftermarket_trade_no" label="退款单号" width="180" />
+      <el-table-column label="商品信息" min-width="200">
+        <template #default="scope">
+          <div class="goods-info">
+            <el-image
+              v-if="scope.row.goods_image"
+              style="width: 50px; height: 50px; margin-right: 10px;"
+              :src="scope.row.goods_image"
+              :preview-src-list="[scope.row.goods_image]"
+              fit="cover"
+            />
+            <div class="goods-text">
+              <div>{{ scope.row.goods_name || '商品信息不存在' }}</div>
+              <div v-if="scope.row.orderItem">数量: {{ scope.row.orderItem.nums }}</div>
+            </div>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="用户" width="120">
+        <template #default="scope">
+          {{ scope.row.user ? scope.row.user.username : '未知用户' }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="num" label="退款数量" width="100" align="center" />
+      <el-table-column label="退款金额" width="120" align="center">
+        <template #default="scope">
+          <span v-if="scope.row.verify_status === 4">
+            ¥{{ scope.row.real_refund_money }}
+          </span>
+          <span v-else>
+            待定
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column label="退款类型" width="120" align="center">
+        <template #default="scope">
+          <el-tag type="info">{{ scope.row.aftermarket_type_text }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="状态" width="100" align="center">
+        <template #default="scope">
+          <el-tag :type="getVerifyStatusType(scope.row.verify_status)">
+            {{ scope.row.verify_status_text }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="created_at" label="申请时间" width="180" />
+      <el-table-column label="操作" width="180" align="center">
+        <template #default="scope">
+          <el-button type="primary" size="small" @click="handleDetail(scope.row)">
+            详情
+          </el-button>
+          <el-button 
+            v-if="scope.row.verify_status === 0" 
+            type="success" 
+            size="small" 
+            @click="handleAudit(scope.row, 1)"
+          >
+            通过
+          </el-button>
+          <el-button 
+            v-if="scope.row.verify_status === 0" 
+            type="danger" 
+            size="small" 
+            @click="handleAudit(scope.row, 2)"
+          >
+            拒绝
+          </el-button>
+          <el-button 
+            v-if="scope.row.verify_status === 3" 
+            type="warning" 
+            size="small" 
+            @click="handleRefund(scope.row)"
+          >
+            退款
+          </el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-pagination
+      v-if="total > 0"
+      :current-page="listQuery.page"
+      :page-sizes="[10, 20, 30, 50]"
+      :page-size="listQuery.limit"
+      layout="total, sizes, prev, pager, next, jumper"
+      :total="total"
+      @size-change="handleSizeChange"
+      @current-change="handleCurrentChange"
+      class="pagination-container"
+    />
+    
+    <!-- 退款详情弹窗 -->
+    <el-dialog
+      title="退款详情"
+      v-model="dialogVisible"
+      width="60%"
+    >
+      <div v-if="currentRefund" class="refund-detail">
+        <h3 class="section-title">基本信息</h3>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="退款单号">{{ currentRefund.aftermarket_trade_no }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="getVerifyStatusType(currentRefund.verify_status)">
+              {{ currentRefund.verify_status_text }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="关联订单号">
+            {{ currentRefund.order ? currentRefund.order.order_id : '无关联订单' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="用户名">
+            {{ currentRefund.user ? currentRefund.user.username : '未知用户' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="申请类型">{{ currentRefund.aftermarket_type_text }}</el-descriptions-item>
+          <el-descriptions-item label="申请来源">{{ currentRefund.apply_from_text }}</el-descriptions-item>
+          <el-descriptions-item label="申请时间">{{ currentRefund.created_at }}</el-descriptions-item>
+          <el-descriptions-item label="退款金额" v-if="currentRefund.verify_status === 4">
+            ¥{{ currentRefund.real_refund_money }}
+          </el-descriptions-item>
+          <el-descriptions-item label="联系电话">{{ currentRefund.aftermarket_phone }}</el-descriptions-item>
+        </el-descriptions>
+        
+        <h3 class="section-title">退款原因</h3>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="退款原因">{{ currentRefund.aftermarket_reason }}</el-descriptions-item>
+          <el-descriptions-item label="详细说明">{{ currentRefund.aftermarket_description || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="凭证图片" v-if="currentRefund.aftermarket_images">
+            <div class="image-container">
+              <template v-if="currentRefund.aftermarket_images">
+                <el-image
+                  v-for="(image, index) in getRefundImages(currentRefund.aftermarket_images)"
+                  :key="index"
+                  style="width: 100px; height: 100px; margin-right: 10px;"
+                  :src="image"
+                  :preview-src-list="getRefundImages(currentRefund.aftermarket_images)"
+                  fit="cover"
+                />
+              </template>
+              <span v-else>无凭证图片</span>
+            </div>
+          </el-descriptions-item>
+        </el-descriptions>
+        
+        <h3 class="section-title">商品信息</h3>
+        <el-descriptions :column="2" border v-if="currentRefund.orderItem">
+          <el-descriptions-item label="商品名称">{{ currentRefund.orderItem.name }}</el-descriptions-item>
+          <el-descriptions-item label="商品规格">{{ currentRefund.orderItem.spec_text || '无规格' }}</el-descriptions-item>
+          <el-descriptions-item label="商品单价">¥{{ currentRefund.orderItem.price }}</el-descriptions-item>
+          <el-descriptions-item label="购买数量">{{ currentRefund.orderItem.nums }}</el-descriptions-item>
+          <el-descriptions-item label="商品总价">¥{{ currentRefund.orderItem.amount }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="dialogVisible = false">关闭</el-button>
+          <el-button 
+            v-if="currentRefund && currentRefund.verify_status === 0" 
+            type="success" 
+            @click="handleAudit(currentRefund, 1)"
+          >
+            通过审核
+          </el-button>
+          <el-button 
+            v-if="currentRefund && currentRefund.verify_status === 0" 
+            type="danger" 
+            @click="handleAudit(currentRefund, 2)"
+          >
+            拒绝退款
+          </el-button>
+          <el-button 
+            v-if="currentRefund && currentRefund.verify_status === 3" 
+            type="warning" 
+            @click="handleRefund(currentRefund)"
+          >
+            处理退款
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+    
+    <!-- 审核退款弹窗 -->
+    <el-dialog
+      :title="auditStatus === 1 ? '通过退款申请' : '拒绝退款申请'"
+      v-model="auditDialogVisible"
+      width="500px"
+    >
+      <el-form 
+        ref="auditFormRef"
+        :model="auditForm"
+        label-width="100px"
+      >
+        <el-form-item label="处理备注" prop="aftermarket_description">
+          <el-input 
+            v-model="auditForm.aftermarket_description" 
+            type="textarea" 
+            rows="3"
+            placeholder="请输入处理备注" 
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="auditDialogVisible = false">取消</el-button>
+          <el-button :type="auditStatus === 1 ? 'success' : 'danger'" @click="submitAuditForm">确认</el-button>
+        </span>
+      </template>
+    </el-dialog>
+    
+    <!-- 处理退款弹窗 -->
+    <el-dialog
+      title="处理退款"
+      v-model="refundDialogVisible"
+      width="500px"
+    >
+      <el-form 
+        ref="refundFormRef"
+        :model="refundForm"
+        :rules="refundRules"
+        label-width="100px"
+      >
+        <el-form-item label="退款金额" prop="real_refund_money">
+          <el-input-number 
+            v-model="refundForm.real_refund_money"
+            :min="0"
+            :precision="2"
+            :step="0.01"
+            style="width: 100%;"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="refundDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitRefundForm">确认退款</el-button>
+        </span>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script>
+import { ref, reactive, onMounted } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import * as orderApi from '../../../api/order';
+
+export default {
+  name: 'RefundList',
+  setup() {
+    const listLoading = ref(true);
+    const list = ref([]);
+    const total = ref(0);
+    const dateRange = ref([]);
+    const listQuery = reactive({
+      page: 1,
+      limit: 10,
+      keyword: '',
+      verify_status: undefined,
+      aftermarket_type: undefined,
+      start_date: undefined,
+      end_date: undefined
+    });
+    
+    const verifyStatusOptions = [
+      { label: '待审核', value: 0 },
+      { label: '审核通过', value: 1 },
+      { label: '审核拒绝', value: 2 },
+      { label: '退款中', value: 3 },
+      { label: '退款完成', value: 4 }
+    ];
+    
+    const refundTypeOptions = [
+      { label: '仅退款', value: 0 },
+      { label: '退货退款', value: 1 },
+      { label: '退货换货', value: 2 }
+    ];
+    
+    const dialogVisible = ref(false);
+    const currentRefund = ref(null);
+    
+    // 审核弹窗
+    const auditDialogVisible = ref(false);
+    const auditFormRef = ref(null);
+    const auditForm = reactive({
+      aftermarket_description: ''
+    });
+    const auditStatus = ref(0);
+    
+    // 退款弹窗
+    const refundDialogVisible = ref(false);
+    const refundFormRef = ref(null);
+    const refundForm = reactive({
+      real_refund_money: 0
+    });
+    const refundRules = {
+      real_refund_money: [
+        { required: true, message: '请输入退款金额', trigger: 'blur' },
+        { type: 'number', min: 0.01, message: '退款金额必须大于0', trigger: 'blur' }
+      ]
+    };
+    
+    // 获取退款列表
+    const fetchData = () => {
+      listLoading.value = true;
+      
+      orderApi.getRefunds(listQuery)
+        .then(response => {
+          if (response.data.code === 0) {
+            list.value = response.data.data;
+            total.value = response.data.total;
+          } else {
+            ElMessage.error(response.data.message || '获取退款列表失败');
+          }
+        })
+        .catch(error => {
+          console.error('获取退款列表失败:', error);
+          ElMessage.error('获取退款列表失败');
+        })
+        .finally(() => {
+          listLoading.value = false;
+        });
+    };
+    
+    // 获取退款图片数组
+    const getRefundImages = (imagesStr) => {
+      if (!imagesStr) return [];
+      
+      try {
+        // 尝试解析JSON
+        const images = JSON.parse(imagesStr);
+        if (Array.isArray(images)) {
+          return images;
+        }
+        return [imagesStr]; // 如果不是数组，返回单个图片
+      } catch (e) {
+        // 如果解析失败，可能是直接的字符串
+        const imgArray = imagesStr.split(',').filter(Boolean);
+        return imgArray.length > 0 ? imgArray : [imagesStr];
+      }
+    };
+    
+    // 日期范围改变
+    const handleDateRangeChange = (val) => {
+      if (val) {
+        listQuery.start_date = val[0];
+        listQuery.end_date = val[1];
+      } else {
+        listQuery.start_date = undefined;
+        listQuery.end_date = undefined;
+      }
+    };
+    
+    // 搜索
+    const handleFilter = () => {
+      listQuery.page = 1;
+      fetchData();
+    };
+    
+    // 改变每页显示数量
+    const handleSizeChange = (val) => {
+      listQuery.limit = val;
+      fetchData();
+    };
+    
+    // 改变页码
+    const handleCurrentChange = (val) => {
+      listQuery.page = val;
+      fetchData();
+    };
+    
+    // 查看详情
+    const handleDetail = (row) => {
+      orderApi.getRefundDetail(row.id)
+        .then(response => {
+          if (response.data.code === 0) {
+            currentRefund.value = response.data.data;
+            dialogVisible.value = true;
+          } else {
+            ElMessage.error(response.data.message || '获取退款详情失败');
+          }
+        })
+        .catch(error => {
+          console.error('获取退款详情失败:', error);
+          ElMessage.error('获取退款详情失败');
+        });
+    };
+    
+    // 审核操作
+    const handleAudit = (refund, status) => {
+      auditStatus.value = status;
+      auditForm.aftermarket_description = '';
+      auditDialogVisible.value = true;
+      
+      // 保存当前处理的退款单
+      if (!dialogVisible.value) {
+        currentRefund.value = refund;
+      }
+    };
+    
+    // 提交审核表单
+    const submitAuditForm = () => {
+      if (!currentRefund.value) return;
+      
+      const data = {
+        verify_status: auditStatus.value,
+        aftermarket_description: auditForm.aftermarket_description
+      };
+      
+      orderApi.auditRefund(currentRefund.value.id, data)
+        .then(response => {
+          if (response.data.code === 0) {
+            ElMessage.success(auditStatus.value === 1 ? '通过审核成功' : '拒绝退款成功');
+            auditDialogVisible.value = false;
+            
+            // 刷新列表和当前查看的退款详情
+            fetchData();
+            if (dialogVisible.value) {
+              orderApi.getRefundDetail(currentRefund.value.id).then(resp => {
+                if (resp.data.code === 0) {
+                  currentRefund.value = resp.data.data;
+                }
+              });
+            }
+          } else {
+            ElMessage.error(response.data.message || '审核操作失败');
+          }
+        })
+        .catch(error => {
+          console.error('审核操作失败:', error);
+          ElMessage.error('审核操作失败');
+        });
+    };
+    
+    // 处理退款
+    const handleRefund = (refund) => {
+      // 确定退款金额
+      let suggestedAmount = 0;
+      
+      if (refund.orderItem) {
+        if (refund.num >= refund.orderItem.nums) {
+          // 全额退款
+          suggestedAmount = refund.orderItem.amount;
+        } else {
+          // 按比例退款
+          suggestedAmount = (refund.orderItem.price * refund.num);
+        }
+      }
+      
+      refundForm.real_refund_money = Number(suggestedAmount.toFixed(2));
+      refundDialogVisible.value = true;
+      
+      // 保存当前处理的退款单
+      if (!dialogVisible.value) {
+        currentRefund.value = refund;
+      }
+    };
+    
+    // 提交退款表单
+    const submitRefundForm = () => {
+      refundFormRef.value.validate((valid) => {
+        if (valid && currentRefund.value) {
+          orderApi.processRefund(currentRefund.value.id, refundForm)
+            .then(response => {
+              if (response.data.code === 0) {
+                ElMessage.success('退款处理成功');
+                refundDialogVisible.value = false;
+                
+                // 刷新列表和当前查看的退款详情
+                fetchData();
+                if (dialogVisible.value) {
+                  orderApi.getRefundDetail(currentRefund.value.id).then(resp => {
+                    if (resp.data.code === 0) {
+                      currentRefund.value = resp.data.data;
+                    }
+                  });
+                }
+              } else {
+                ElMessage.error(response.data.message || '退款处理失败');
+              }
+            })
+            .catch(error => {
+              console.error('退款处理失败:', error);
+              ElMessage.error('退款处理失败');
+            });
+        }
+      });
+    };
+    
+    // 获取审核状态类型
+    const getVerifyStatusType = (status) => {
+      const statusMap = {
+        0: 'warning',  // 待审核
+        1: 'success',  // 审核通过
+        2: 'danger',   // 审核拒绝
+        3: 'primary',  // 退款中
+        4: 'info'      // 退款完成
+      };
+      return statusMap[status] || 'info';
+    };
+    
+    onMounted(() => {
+      fetchData();
+    });
+    
+    return {
+      listLoading,
+      list,
+      total,
+      dateRange,
+      listQuery,
+      verifyStatusOptions,
+      refundTypeOptions,
+      dialogVisible,
+      currentRefund,
+      auditDialogVisible,
+      auditFormRef,
+      auditForm,
+      auditStatus,
+      refundDialogVisible,
+      refundFormRef,
+      refundForm,
+      refundRules,
+      getRefundImages,
+      handleDateRangeChange,
+      handleFilter,
+      handleSizeChange,
+      handleCurrentChange,
+      handleDetail,
+      handleAudit,
+      submitAuditForm,
+      handleRefund,
+      submitRefundForm,
+      getVerifyStatusType
+    };
+  }
+};
+</script>
+
+<style scoped>
+.filter-container {
+  padding-bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-item {
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.date-picker {
+  width: 360px;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.section-title {
+  margin: 20px 0 10px;
+  font-size: 16px;
+  font-weight: bold;
+  color: #303133;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #EBEEF5;
+}
+
+.refund-detail {
+  padding: 0 10px;
+}
+
+.goods-info {
+  display: flex;
+  align-items: center;
+}
+
+.goods-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.image-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+</style> 

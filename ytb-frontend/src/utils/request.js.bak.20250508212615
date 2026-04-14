@@ -1,0 +1,141 @@
+import service from './axios';
+
+/**
+ * 封装GET请求
+ * @param {string} url 请求路径
+ * @param {object} params 请求参数
+ * @param {object} config 额外配置
+ * @returns {Promise} 请求Promise
+ */
+export function get(url, params = {}, config = {}) {
+  return service({
+    url,
+    method: 'get',
+    params,
+    ...config
+  });
+}
+
+/**
+ * 封装POST请求
+ * @param {string} url 请求路径
+ * @param {object} data 请求数据
+ * @param {object} config 额外配置
+ * @returns {Promise} 请求Promise
+ */
+export function post(url, data = {}, config = {}) {
+  return service({
+    url,
+    method: 'post',
+    data,
+    ...config
+  });
+}
+
+/**
+ * 封装PUT请求
+ * @param {string} url 请求路径
+ * @param {object} data 请求数据
+ * @param {object} config 额外配置
+ * @returns {Promise} 请求Promise
+ */
+export function put(url, data = {}, config = {}) {
+  return service({
+    url,
+    method: 'put',
+    data,
+    ...config
+  });
+}
+
+/**
+ * 封装DELETE请求
+ * @param {string} url 请求路径
+ * @param {object} data 请求数据
+ * @param {object} config 额外配置
+ * @returns {Promise} 请求Promise
+ */
+export function del(url, data = {}, config = {}) {
+  return service({
+    url,
+    method: 'delete',
+    data,
+    ...config
+  });
+}
+
+/**
+ * 格式化响应结果
+ * @param {object} response 原始响应
+ * @returns {object} 格式化后的响应
+ */
+export function formatResponse(response) {
+  // 记录原始响应
+  console.log('格式化响应前:', response);
+
+  // 如果没有响应或响应不包含data，则返回标准失败响应
+  if (!response || !response.data) {
+    console.error('响应数据缺失:', response);
+    return { code: 500, message: '服务器返回数据格式错误', data: null };
+  }
+
+  // 处理两种不同的响应格式
+  let result;
+
+  // 检查是否是嵌套的响应格式: { data: { code: 0, message: '...', data: [...] } }
+  if (response.data.code !== undefined) {
+    // 直接格式: { code: 0, message: '...', data: [...] }
+    result = response.data;
+  } else if (response.data.data && response.data.data.code !== undefined) {
+    // 嵌套格式: { data: { code: 0, message: '...', data: [...] } }
+    result = response.data.data;
+  } else {
+    // 其他格式，尝试最佳猜测
+    result = response.data;
+    // 如果响应没有code属性，添加标准code
+    if (result.code === undefined) {
+      console.warn('响应缺少code字段，自动添加:', result);
+      // 根据HTTP状态码设置code
+      result.code = response.status === 200 ? 0 : response.status;
+    }
+  }
+
+  // 如果没有message字段，添加标准message
+  if (!result.message) {
+    result.message = result.code === 0 ? '操作成功' : '操作失败';
+  }
+
+  console.log('格式化响应后:', result);
+  return result;
+}
+
+/**
+ * 上传文件
+ * @param {string} url 上传路径
+ * @param {FormData} formData 表单数据
+ * @param {Function} onProgress 上传进度回调
+ * @returns {Promise} 上传Promise
+ */
+export function upload(url, formData, onProgress = null) {
+  return service({
+    url,
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    onUploadProgress: onProgress ? event => {
+      const progress = Math.round((event.loaded * 100) / event.total);
+      onProgress(progress);
+    } : undefined
+  });
+}
+
+export default {
+  get,
+  post,
+  put,
+  delete: del,
+  upload,
+  formatResponse
+};
