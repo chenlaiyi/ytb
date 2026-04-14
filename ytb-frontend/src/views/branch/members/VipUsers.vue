@@ -3,8 +3,8 @@
     <!-- 页面标题和操作 -->
     <div class="page-header">
       <div class="header-left">
-        <h2>VIP会员</h2>
-        <p>管理分支机构的VIP用户</p>
+        <h2>CP会员</h2>
+        <p>管理分支机构的CP用户</p>
       </div>
       <div class="header-right">
         <el-button type="primary" @click="exportUsers">
@@ -23,7 +23,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ statistics.totalVip }}</div>
-            <div class="stat-label">总VIP数</div>
+            <div class="stat-label">总CP数</div>
           </div>
         </div>
       </el-card>
@@ -47,7 +47,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ statistics.paidVip }}</div>
-            <div class="stat-label">已完款VIP</div>
+            <div class="stat-label">已完款CP</div>
           </div>
         </div>
       </el-card>
@@ -59,7 +59,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ statistics.unpaidVip }}</div>
-            <div class="stat-label">未完款VIP</div>
+            <div class="stat-label">未完款CP</div>
           </div>
         </div>
       </el-card>
@@ -99,7 +99,7 @@
       </el-form>
     </el-card>
 
-    <!-- VIP用户列表 -->
+    <!-- CP用户列表 -->
     <el-card shadow="never">
       <el-table
         :data="users"
@@ -115,7 +115,7 @@
         </el-table-column>
         <el-table-column prop="nickname" label="昵称" width="120" />
         <el-table-column prop="phone" label="手机号" width="130" />
-        <el-table-column label="VIP状态" width="100">
+        <el-table-column label="CP状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.vip_at ? 'success' : 'warning'">
               {{ row.vip_at ? '已完款' : '未完款' }}
@@ -169,9 +169,9 @@
       </div>
     </el-card>
 
-    <!-- VIP用户详情对话框 -->
+    <!-- CP用户详情对话框 -->
     <el-dialog
-      title="VIP用户详情"
+      title="CP用户详情"
       v-model="detailVisible"
       width="800px"
     >
@@ -180,7 +180,7 @@
           <el-descriptions-item label="用户ID">{{ currentUser.id }}</el-descriptions-item>
           <el-descriptions-item label="昵称">{{ currentUser.nickname }}</el-descriptions-item>
           <el-descriptions-item label="手机号">{{ currentUser.phone }}</el-descriptions-item>
-          <el-descriptions-item label="VIP状态">
+          <el-descriptions-item label="CP状态">
             <el-tag :type="currentUser.vip_at ? 'success' : 'warning'">
               {{ currentUser.vip_at ? '已完款' : '未完款' }}
             </el-tag>
@@ -288,9 +288,9 @@
       </div>
     </el-dialog>
 
-    <!-- 编辑VIP用户对话框 -->
+    <!-- 编辑CP用户对话框 -->
     <el-dialog
-      title="编辑VIP用户"
+      title="编辑CP用户"
       v-model="editVisible"
       width="600px"
       @close="resetEditForm"
@@ -304,8 +304,8 @@
         <el-form-item label="昵称" prop="nickname">
           <el-input v-model="editForm.nickname" placeholder="请输入昵称" />
         </el-form-item>
-        <el-form-item label="VIP状态" prop="vip_at_status">
-          <el-select v-model="editForm.vip_at_status" placeholder="请选择VIP状态">
+        <el-form-item label="CP状态" prop="vip_at_status">
+          <el-select v-model="editForm.vip_at_status" placeholder="请选择CP状态">
             <el-option label="已完款" value="paid" />
             <el-option label="未完款" value="unpaid" />
           </el-select>
@@ -358,7 +358,7 @@ const detailVisible = ref(false)
 const editVisible = ref(false)
 const editFormRef = ref()
 
-// VIP用户列表
+// CP用户列表
 const users = ref([])
 const currentUser = ref(null)
 
@@ -409,14 +409,14 @@ const editRules = {
     { required: true, message: '请输入昵称', trigger: 'blur' }
   ],
   vip_at_status: [
-    { required: true, message: '请选择VIP状态', trigger: 'change' }
+    { required: true, message: '请选择CP状态', trigger: 'change' }
   ],
   status: [
     { required: true, message: '请选择状态', trigger: 'change' }
   ]
 }
 
-// 获取VIP用户列表
+// 获取CP用户列表
 const fetchUsers = async () => {
   loading.value = true
   try {
@@ -428,7 +428,7 @@ const fetchUsers = async () => {
       dateRange: filters.dateRange
     }
     
-    // 转换VIP状态过滤参数
+    // 转换CP状态过滤参数
     if (filters.vip_at_status) {
       params.is_vip_paid = filters.vip_at_status === 'paid' ? 1 : 0
     }
@@ -445,17 +445,17 @@ const fetchUsers = async () => {
       statistics.paidVip = response.data.paid_vip || 0
       statistics.unpaidVip = response.data.unpaid_vip || 0
     } else {
-      ElMessage.error(response.message || '获取VIP用户列表失败')
+      ElMessage.error(response.message || '获取CP用户列表失败')
     }
   } catch (error) {
-    console.error('获取VIP用户列表失败:', error)
-    ElMessage.error('获取VIP用户列表失败')
+    console.error('获取CP用户列表失败:', error)
+    ElMessage.error('获取CP用户列表失败')
   } finally {
     loading.value = false
   }
 }
 
-// 显示VIP用户详情
+// 显示CP用户详情
 const showUserDetail = (row) => {
   currentUser.value = row
   detailVisible.value = true
@@ -536,7 +536,7 @@ const toggleStatus = async (row) => {
   const action = row.status === 'normal' ? '禁用' : '启用'
   
   try {
-    await ElMessageBox.confirm(`确定要${action}该VIP用户吗？`, '提示', {
+    await ElMessageBox.confirm(`确定要${action}该CP用户吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
@@ -561,7 +561,7 @@ const toggleStatus = async (row) => {
   }
 }
 
-// 导出VIP用户数据
+// 导出CP用户数据
 const exportUsers = () => {
   ElMessage.success('导出功能开发中')
 }

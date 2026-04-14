@@ -18,8 +18,8 @@
             <el-col :span="8">
               <div class="menu-item">
                 <el-icon class="menu-icon" style="color: red;"><Money /></el-icon>
-                <h4>VIP分红配置</h4>
-                <p>配置VIP招募分红规则</p>
+                <h4>CP分红配置</h4>
+                <p>配置CP招募分红规则</p>
                 <el-button type="danger" @click="goToVipConfig">进入配置</el-button>
               </div>
             </el-col>
@@ -79,8 +79,8 @@ import { Money, CreditCard, DataAnalysis } from '@element-plus/icons-vue'
 const router = useRouter()
 
 const goToVipConfig = () => {
-  // 跳转到VIP分红配置页面
-  console.log('跳转到VIP分红配置')
+  // 跳转到CP分红配置页面
+  console.log('跳转到CP分红配置')
 }
 
 const goToDeviceConfig = () => {

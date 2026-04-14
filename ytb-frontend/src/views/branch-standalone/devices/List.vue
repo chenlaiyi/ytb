@@ -287,7 +287,7 @@
               {{ currentDevice.user.phone }}
             </el-descriptions-item>
             <el-descriptions-item label="用户类型">
-              <el-tag v-if="currentDevice.user.is_vip" type="warning">VIP用户</el-tag>
+              <el-tag v-if="currentDevice.user.is_vip" type="warning">CP用户</el-tag>
               <el-tag v-else>普通用户</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="绑定时间">

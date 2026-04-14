@@ -47,7 +47,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ statistics.vipUsers }}</div>
-            <div class="stat-label">VIP用户</div>
+            <div class="stat-label">CP用户</div>
           </div>
         </div>
       </el-card>
@@ -59,7 +59,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ statistics.paidVipUsers }}</div>
-            <div class="stat-label">已完款VIP</div>
+            <div class="stat-label">已完款CP</div>
           </div>
         </div>
       </el-card>
@@ -79,7 +79,7 @@
         <el-form-item label="用户角色">
           <el-select v-model="filters.user_type" placeholder="请选择角色" clearable style="width: 140px">
             <el-option label="普通用户" value="normal" />
-            <el-option label="VIP会员" value="vip" />
+            <el-option label="CP会员" value="vip" />
             <el-option label="业务员" value="salesman" />
             <el-option label="管理员" value="admin" />
             <el-option label="工程师" value="engineer" />
@@ -89,8 +89,8 @@
             <el-option label="净水器渠道商" value="water_purifier_agent" />
           </el-select>
         </el-form-item>
-        <el-form-item label="VIP状态">
-          <el-select v-model="filters.vip_paid_status" placeholder="请选择VIP状态" clearable style="width: 120px">
+        <el-form-item label="CP状态">
+          <el-select v-model="filters.vip_paid_status" placeholder="请选择CP状态" clearable style="width: 120px">
             <el-option label="已完款" :value="1" />
             <el-option label="未完款" :value="0" />
           </el-select>
@@ -161,11 +161,11 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="VIP状态" width="120" align="center">
+        <el-table-column label="CP状态" width="120" align="center">
           <template #default="{ row }">
             <div v-if="row.is_vip">
               <el-tag :type="row.vip_at ? 'success' : 'warning'" size="small">
-                {{ row.vip_at ? '已完款VIP' : '未完款VIP' }}
+                {{ row.vip_at ? '已完款CP' : '未完款CP' }}
               </el-tag>
             </div>
             <el-tag v-else type="info" size="small">普通用户</el-tag>
@@ -299,14 +299,14 @@
             </el-descriptions>
           </el-tab-pane>
           
-          <el-tab-pane label="VIP信息" name="vip">
+          <el-tab-pane label="CP信息" name="vip">
             <el-descriptions :column="2" border>
-              <el-descriptions-item label="是否VIP">
+              <el-descriptions-item label="是否CP">
                 <el-tag :type="currentUser.is_vip ? 'success' : 'info'">
-                  {{ currentUser.is_vip ? 'VIP会员' : '普通用户' }}
+                  {{ currentUser.is_vip ? 'CP会员' : '普通用户' }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="VIP开通时间">
+              <el-descriptions-item label="CP开通时间">
                 {{ formatDate(currentUser.vip_at) || '未开通' }}
               </el-descriptions-item>
               <el-descriptions-item label="完款状态">
@@ -317,12 +317,12 @@
               </el-descriptions-item>
               <el-descriptions-item label="完款说明">
                 <span v-if="currentUser.is_vip">
-                  {{ currentUser.vip_at ? '根据VIP开通时间判断为已完款' : '未设置VIP开通时间，视为未完款' }}
+                  {{ currentUser.vip_at ? '根据CP开通时间判断为已完款' : '未设置CP开通时间，视为未完款' }}
                 </span>
-                <span v-else>非VIP用户</span>
+                <span v-else>非CP用户</span>
               </el-descriptions-item>
-              <el-descriptions-item label="VIP等级">{{ currentUser.vip_level || '普通VIP' }}</el-descriptions-item>
-              <el-descriptions-item label="VIP到期时间">{{ formatDate(currentUser.vip_expire_at) || '永久' }}</el-descriptions-item>
+              <el-descriptions-item label="CP等级">{{ currentUser.vip_level || '普通CP' }}</el-descriptions-item>
+              <el-descriptions-item label="CP到期时间">{{ formatDate(currentUser.vip_expire_at) || '永久' }}</el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
           
@@ -330,10 +330,10 @@
             <el-descriptions :column="2" border>
               <el-descriptions-item label="推荐人ID">{{ currentUser.referrer_id || '无' }}</el-descriptions-item>
               <el-descriptions-item label="推荐人姓名">{{ getReferrerDisplayName(currentUser) || '点点够' }}</el-descriptions-item>
-              <el-descriptions-item label="直推VIP数">{{ currentUser.direct_vip_count || 0 }}人</el-descriptions-item>
-              <el-descriptions-item label="团队VIP数">{{ currentUser.team_vip_count || 0 }}人</el-descriptions-item>
-              <el-descriptions-item label="本月直推VIP">{{ currentUser.month_direct_vip || 0 }}人</el-descriptions-item>
-              <el-descriptions-item label="本月团队VIP">{{ currentUser.month_team_vip || 0 }}人</el-descriptions-item>
+              <el-descriptions-item label="直推CP数">{{ currentUser.direct_vip_count || 0 }}人</el-descriptions-item>
+              <el-descriptions-item label="团队CP数">{{ currentUser.team_vip_count || 0 }}人</el-descriptions-item>
+              <el-descriptions-item label="本月直推CP">{{ currentUser.month_direct_vip || 0 }}人</el-descriptions-item>
+              <el-descriptions-item label="本月团队CP">{{ currentUser.month_team_vip || 0 }}人</el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
         </el-tabs>
@@ -372,8 +372,8 @@
             </el-form-item>
           </el-tab-pane>
           
-          <el-tab-pane label="VIP信息" name="vip">
-            <el-form-item label="VIP用户" prop="is_vip">
+          <el-tab-pane label="CP信息" name="vip">
+            <el-form-item label="CP用户" prop="is_vip">
               <el-switch 
                 v-model="editForm.is_vip" 
                 active-text="是" 
@@ -382,11 +382,11 @@
               />
             </el-form-item>
             <template v-if="editForm.is_vip">
-              <el-form-item label="VIP开通时间" prop="vip_at">
+              <el-form-item label="CP开通时间" prop="vip_at">
                 <el-date-picker
                   v-model="editForm.vip_at"
                   type="datetime"
-                  placeholder="选择VIP开通时间（设置此时间表示已完款）"
+                  placeholder="选择CP开通时间（设置此时间表示已完款）"
                   format="YYYY-MM-DD HH:mm:ss"
                   value-format="YYYY-MM-DD HH:mm:ss"
                   style="width: 100%"
@@ -397,7 +397,7 @@
                   {{ editForm.vip_at ? '已完款' : '未完款' }}
                 </el-tag>
                 <div style="font-size: 12px; color: #909399; margin-top: 4px;">
-                  完款状态根据VIP开通时间自动判断，有开通时间即为已完款
+                  完款状态根据CP开通时间自动判断，有开通时间即为已完款
                 </div>
               </el-form-item>
             </template>
@@ -436,7 +436,7 @@
                     <div class="referrer-info">
                       <div class="referrer-name">
                         {{ user.name || user.wechat_nickname || user.nickname || '未知用户' }}
-                        <el-tag v-if="user.is_vip" type="success" size="small">VIP</el-tag>
+                        <el-tag v-if="user.is_vip" type="success" size="small">CP</el-tag>
                       </div>
                       <div class="referrer-details">
                         ID: {{ user.id }} | {{ user.phone || '未绑定手机' }}
@@ -818,13 +818,13 @@ const showEditDialog = async (row) => {
   editActiveTab.value = 'basic'
 }
 
-// VIP状态变化处理
+// CP状态变化处理
 const handleVipStatusChange = (value) => {
   if (value && !editForm.vip_at) {
-    // 当设置为VIP时，自动设置开通时间（表示已完款）
+    // 当设置为CP时，自动设置开通时间（表示已完款）
     editForm.vip_at = formatDateTime(new Date())
   } else if (!value) {
-    // 当取消VIP时，清除开通时间
+    // 当取消CP时，清除开通时间
     editForm.vip_at = ''
   }
 }
@@ -877,14 +877,14 @@ const searchReferrers = async (query) => {
   }
 }
 
-// 加载默认推荐人列表（优先显示VIP用户）
+// 加载默认推荐人列表（优先显示CP用户）
 const loadDefaultReferrers = async () => {
   referrerLoading.value = true
   try {
     const response = await getBranchAppUsers(branchId.value, {
       page: 1,
       size: 50,
-      user_type: 'vip', // 优先加载VIP用户作为推荐人
+      user_type: 'vip', // 优先加载CP用户作为推荐人
       exclude_id: editForm.id,
       simple: 1 // 使用简单模式，获取完整的用户信息用于选择
     })
@@ -893,7 +893,7 @@ const loadDefaultReferrers = async () => {
       const users = response.data.data || []
       referrerOptions.value = users.filter(user => user.id !== editForm.id)
       
-      // 如果VIP用户不够，再加载一些普通用户
+      // 如果CP用户不够，再加载一些普通用户
       if (referrerOptions.value.length < 20) {
         const normalResponse = await getBranchAppUsers(branchId.value, {
           page: 1,
@@ -967,7 +967,7 @@ const submitEdit = async () => {
     try {
       const submitData = { ...editForm }
       
-      // 处理VIP相关逻辑
+      // 处理CP相关逻辑
       if (!submitData.is_vip) {
         submitData.vip_at = null
       }
@@ -1179,7 +1179,7 @@ const getUserRoles = (row) => {
     roles.push({ name: '管理员', type: 'danger' })
   }
   if (row.is_vip) {
-    roles.push({ name: 'VIP会员', type: 'success' })
+    roles.push({ name: 'CP会员', type: 'success' })
   }
   if (row.is_salesman) {
     roles.push({ name: '业务员', type: 'warning' })

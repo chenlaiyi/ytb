@@ -22,7 +22,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-number">{{ stats.vip_users || 0 }}</div>
-          <div class="stat-label">VIP用户</div>
+          <div class="stat-label">CP用户</div>
           <div class="stat-change" :class="{ positive: stats.vip_growth > 0 }">
             <el-icon><TrendCharts /></el-icon>
             {{ stats.vip_growth > 0 ? '+' : '' }}{{ stats.vip_growth || 0 }}%
@@ -244,7 +244,7 @@
             @click="navigateTo(`/branch-standalone/${branchInfo.code}/members/vip-users`)"
           >
             <el-icon><Trophy /></el-icon>
-            VIP用户管理
+            CP用户管理
           </el-button>
         </div>
 
@@ -535,7 +535,7 @@ const fetchUserTrend = async () => {
           data: [65, 89, 120, 155, 182, 210]
         },
         {
-          name: 'VIP用户',
+          name: 'CP用户',
           data: [10, 18, 25, 32, 38, 45]
         }
       ]

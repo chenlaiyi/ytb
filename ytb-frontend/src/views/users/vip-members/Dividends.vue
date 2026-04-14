@@ -3,8 +3,8 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-title">
-        <h2>VIP分红管理</h2>
-        <p class="page-description">管理VIP会员分红奖金池、达标名单和分红计算</p>
+        <h2>CP分红管理</h2>
+        <p class="page-description">管理CP会员分红奖金池、达标名单和分红计算</p>
       </div>
       <div class="page-actions">
         <el-button type="primary" size="large" @click="refreshData">
@@ -18,54 +18,54 @@
       </div>
     </div>
 
-    <!-- VIP会员模块导航标签页 -->
+    <!-- CP会员模块导航标签页 -->
     <el-card class="navigation-card" shadow="never">
       <el-tabs v-model="activeTab" @tab-click="handleTabClick" class="vip-tabs">
-        <el-tab-pane label="VIP会员列表" name="list">
+        <el-tab-pane label="CP会员列表" name="list">
           <template #label>
             <span class="tab-label">
               <el-icon><User /></el-icon>
-              VIP会员列表
+              CP会员列表
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP分红管理" name="dividends">
+        <el-tab-pane label="CP分红管理" name="dividends">
           <template #label>
             <span class="tab-label">
               <el-icon><Money /></el-icon>
-              VIP分红管理
+              CP分红管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP排行榜" name="rankings">
+        <el-tab-pane label="CP排行榜" name="rankings">
           <template #label>
             <span class="tab-label">
               <el-icon><Trophy /></el-icon>
-              VIP排行榜
+              CP排行榜
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP余额管理" name="balance">
+        <el-tab-pane label="CP余额管理" name="balance">
           <template #label>
             <span class="tab-label">
               <el-icon><Wallet /></el-icon>
-              VIP余额管理
+              CP余额管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP等级管理" name="levels">
+        <el-tab-pane label="CP等级管理" name="levels">
           <template #label>
             <span class="tab-label">
               <el-icon><Star /></el-icon>
-              VIP等级管理
+              CP等级管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP统计分析" name="statistics">
+        <el-tab-pane label="CP统计分析" name="statistics">
           <template #label>
             <span class="tab-label">
               <el-icon><DataAnalysis /></el-icon>
-              VIP统计分析
+              CP统计分析
             </span>
           </template>
         </el-tab-pane>
@@ -91,7 +91,7 @@
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ overviewStats.totalVipUsers }}</div>
-              <div class="stat-label">VIP用户总数</div>
+              <div class="stat-label">CP用户总数</div>
             </div>
           </div>
         </el-col>
@@ -173,19 +173,19 @@
           </div>
 
           <el-row :gutter="20" class="pool-data-row">
-            <!-- VIP招募分红池 -->
+            <!-- CP招募分红池 -->
             <el-col :span="12">
               <div class="pool-section vip-pool">
                 <div class="pool-header">
                   <div class="pool-title">
                     <el-icon><Star /></el-icon>
-                    VIP招募分红池
+                    CP招募分红池
                   </div>
                   <div class="pool-amount">{{ formatCurrency(monthData.vipPool.totalAmount) }}元</div>
                 </div>
                 <div class="pool-details">
                   <div class="pool-source">
-                    <span>新增VIP：{{ monthData.vipPool.newVipCount }}人</span>
+                    <span>新增CP：{{ monthData.vipPool.newVipCount }}人</span>
                     <span>单人贡献：300元</span>
                   </div>
                   <div class="pool-distribution">
@@ -308,8 +308,8 @@
         </el-form-item>
         <el-form-item label="分红类型">
           <el-select v-model="calculateForm.type" placeholder="选择分红类型" style="width: 100%">
-            <el-option label="全部（VIP招募 + 充值）" value="both" />
-            <el-option label="仅VIP招募分红" value="vip" />
+            <el-option label="全部（CP招募 + 充值）" value="both" />
+            <el-option label="仅CP招募分红" value="vip" />
             <el-option label="仅充值分红" value="recharge" />
           </el-select>
         </el-form-item>
@@ -340,7 +340,7 @@
               <el-card class="overview-card">
                 <div class="overview-item">
                   <div class="overview-value">{{ detailDialog.data.monthData.vipPool.newVipCount }}</div>
-                  <div class="overview-label">新增VIP</div>
+                  <div class="overview-label">新增CP</div>
                 </div>
               </el-card>
             </el-col>
@@ -372,9 +372,9 @@
         </div>
 
         <el-tabs v-model="detailDialog.activeTab" type="card">
-          <el-tab-pane label="VIP招募分红" name="vip">
+          <el-tab-pane label="CP招募分红" name="vip">
             <div class="dividend-detail">
-              <!-- VIP分红汇总 -->
+              <!-- CP分红汇总 -->
               <div class="summary-section mb-4">
                 <h4>分红汇总</h4>
                 <el-row :gutter="20">
@@ -417,7 +417,7 @@
                 </el-row>
               </div>
 
-              <!-- VIP分红用户列表 -->
+              <!-- CP分红用户列表 -->
               <div class="users-section">
                 <el-tabs type="border-card">
                   <el-tab-pane label="初级分红用户" name="primary">
@@ -592,7 +592,7 @@
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="新增VIP用户" name="newVip">
+          <el-tab-pane label="新增CP用户" name="newVip">
             <el-table :data="detailDialog.data.newVipUsers" stripe>
               <el-table-column prop="name" label="用户姓名" width="120" />
               <el-table-column prop="phone" label="手机号" width="130" />
@@ -940,7 +940,7 @@ onMounted(() => {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
-/* VIP会员模块导航标签页 */
+/* CP会员模块导航标签页 */
 .navigation-card {
   margin-bottom: 20px;
   border-radius: 12px;

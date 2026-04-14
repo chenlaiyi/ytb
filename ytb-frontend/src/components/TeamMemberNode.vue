@@ -19,14 +19,14 @@
               type="success" 
               size="small"
             >
-              已完款VIP
+              已完款CP
             </el-tag>
             <el-tag 
               v-else-if="member.is_vip" 
               type="warning" 
               size="small"
             >
-              未完款VIP
+              未完款CP
             </el-tag>
             <el-tag 
               v-else 
@@ -40,7 +40,7 @@
               下级: {{ member.children_count }}人
             </span>
             <span v-if="member.vip_children_count > 0" class="vip-children-count">
-              VIP: {{ member.vip_children_count }}人
+              CP: {{ member.vip_children_count }}人
             </span>
           </div>
           

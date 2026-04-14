@@ -120,7 +120,7 @@ const cockpitData = reactive({
 
 const quickActions = [
   { title: '用户管理', desc: '查看并管理APP用户', path: '/users/app-users', icon: User, type: 'user' },
-  { title: 'VIP会员', desc: '审批与配置VIP', path: '/users/vip-members', icon: Trophy, type: 'vip' },
+  { title: 'CP会员', desc: '审批与配置VIP', path: '/users/vip-members', icon: Trophy, type: 'vip' },
   { title: '订单管理', desc: '订单跟进与处理', path: '/mall/orders', icon: ShoppingCart, type: 'order' },
   { title: '设备监控', desc: '查看设备状态', path: '/devices', icon: Monitor, type: 'device' },
   { title: '财务对账', desc: '提现与收入统计', path: '/finance', icon: Money, type: 'finance' },
@@ -177,7 +177,7 @@ const highlightCards = computed(() => {
       title: '今日新增用户',
       value: formatNumber(users.today || 0),
       suffix: '人',
-      meta: `VIP渗透率 ${users.vip_rate || 0}%`
+      meta: `CP渗透率 ${users.vip_rate || 0}%`
     },
     {
       title: '今日收入',
@@ -217,10 +217,10 @@ const snapshotCards = computed(() => {
       type: 'user'
     },
     {
-      title: 'VIP用户',
+      title: 'CP用户',
       value: users.vip_count || 0,
       prefix: '',
-      meta: `VIP占比 ${users.vip_rate || 0}%`,
+      meta: `CP占比 ${users.vip_rate || 0}%`,
       icon: Trophy,
       type: 'vip'
     },
@@ -243,7 +243,7 @@ const insightCards = computed(() => {
   return [
     {
       title: '用户增长趋势',
-      desc: `今日新增 ${formatNumber(users.today || 0)} · VIP渗透 ${users.vip_rate || 0}%`,
+      desc: `今日新增 ${formatNumber(users.today || 0)} · CP渗透 ${users.vip_rate || 0}%`,
       buttonText: '查看用户',
       buttonType: 'primary',
       path: '/users/app-users'

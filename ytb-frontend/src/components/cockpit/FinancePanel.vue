@@ -98,13 +98,13 @@
       </el-col>
     </el-row>
 
-    <!-- VIP分红财务统计 -->
+    <!-- CP分红财务统计 -->
     <el-row :gutter="20" class="dividend-row">
       <el-col :xs="24">
         <el-card class="dividend-card" shadow="never">
           <template #header>
             <div class="card-header">
-              <span>VIP分红财务统计</span>
+              <span>CP分红财务统计</span>
               <el-tag type="warning" size="small">本月分红池: ¥{{ (data.dividend_pool || 0).toLocaleString() }}</el-tag>
             </div>
           </template>

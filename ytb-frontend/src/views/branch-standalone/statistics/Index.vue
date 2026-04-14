@@ -71,7 +71,7 @@
         </div>
         <div class="metric-content">
           <div class="metric-number">{{ statistics.vip_users || 0 }}</div>
-          <div class="metric-label">VIP用户</div>
+          <div class="metric-label">CP用户</div>
           <div class="metric-change" :class="{ positive: statistics.vip_growth > 0 }">
             <el-icon><TrendCharts /></el-icon>
             {{ statistics.vip_growth > 0 ? '+' : '' }}{{ statistics.vip_growth || 0 }}%
@@ -166,11 +166,11 @@
     <!-- 详细数据表格 -->
     <div class="data-tables">
       <el-row :gutter="20">
-        <!-- VIP用户排行 -->
+        <!-- CP用户排行 -->
         <el-col :span="12">
           <el-card class="table-card" shadow="never">
             <template #header>
-              <h3>VIP用户排行</h3>
+              <h3>CP用户排行</h3>
             </template>
             <el-table :data="vipRanking" size="small" max-height="300">
               <el-table-column type="index" label="排名" width="60" />

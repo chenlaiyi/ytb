@@ -23,6 +23,10 @@ ssh $SERVER "mkdir -p $YTB_ROOT/admin/assets"
 rsync -avz --delete dist/assets/ $SERVER:$YTB_ROOT/admin/assets/
 scp dist/index.html $SERVER:$YTB_ROOT/admin/index.html
 
+# 3. 部署logo到admin目录
+echo "[3/3] 部署logo..."
+scp $SOURCE_DIR/logo.png $SERVER:$YTB_ROOT/admin/logo.png
+
 echo ""
 echo "===== 部署完成 ====="
 echo ""

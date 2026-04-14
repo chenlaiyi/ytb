@@ -190,7 +190,7 @@ export default {
     const logoUrl = ref('');
     const mainMenus = ref([]);
     const allMenus = ref([]);
-    const defaultLogoPath = '/admin/images/logo.png';
+    const defaultLogoPath = '/logo.png';
     const logoVersionToken = (
       (window?.Laravel && window.Laravel.version) ||
       window?.APP_BUILD_VERSION ||

@@ -43,38 +43,26 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-select 
-            v-model="queryParams.role" 
-            placeholder="选择角色" 
-            clearable 
+          <el-select
+            v-model="queryParams.role"
+            placeholder="选择等级"
+            clearable
             style="width: 160px;"
           >
             <template #prefix>
               <el-icon><UserFilled /></el-icon>
             </template>
-            <el-option label="支付机构" value="pay_institution">
-              <el-tag type="success" size="small">支付机构</el-tag>
+            <el-option label="普通用户" value="normal">
+              <el-tag type="info" size="small">普通用户</el-tag>
             </el-option>
-            <el-option label="净水器用户" value="water_purifier_user">
-              <el-tag type="warning" size="small">净水器用户</el-tag>
+            <el-option label="CP伙伴" value="scp">
+              <el-tag type="success" size="small">CP伙伴</el-tag>
             </el-option>
-            <el-option label="工程师" value="engineer">
-              <el-tag type="info" size="small">工程师</el-tag>
+            <el-option label="VIPCP" value="team_cp">
+              <el-tag type="warning" size="small" effect="dark">VIPCP</el-tag>
             </el-option>
-            <el-option label="净水器渠道商" value="water_purifier_agent">
-              <el-tag type="danger" size="small">净水器渠道商</el-tag>
-            </el-option>
-            <el-option label="支付商户" value="pay_merchant">
-              <el-tag type="primary" size="small">支付商户</el-tag>
-            </el-option>
-            <el-option label="VIP会员" value="vip">
-              <el-tag type="success" size="small" effect="dark">VIP会员</el-tag>
-            </el-option>
-            <el-option label="业务员" value="sales">
-              <el-tag type="warning" size="small" effect="dark">业务员</el-tag>
-            </el-option>
-            <el-option label="管理员" value="admin">
-              <el-tag type="info" size="small">管理员</el-tag>
+            <el-option label="BossCP" value="boss_cp">
+              <el-tag type="danger" size="small" effect="dark">BossCP</el-tag>
             </el-option>
           </el-select>
         </el-form-item>
@@ -93,28 +81,6 @@
             </el-option>
             <el-option label="禁用" value="disabled">
               <el-tag type="danger" size="small">禁用</el-tag>
-            </el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-select 
-            v-model="queryParams.branch_id" 
-            placeholder="选择分支机构" 
-            clearable 
-            style="width: 180px;"
-            @change="handleBranchChange"
-          >
-            <template #prefix>
-              <el-icon><OfficeBuilding /></el-icon>
-            </template>
-            <el-option 
-              v-for="branch in branchOptions" 
-              :key="branch.id" 
-              :label="branch.name" 
-              :value="branch.id"
-            >
-              <el-tag :type="(branch.id == 3 || String(branch.id) === '3') ? 'primary' : 'warning'" size="small">{{ branch.code }}</el-tag>
-              <span style="margin-left: 8px;">{{ branch.name }}</span>
             </el-option>
           </el-select>
         </el-form-item>
@@ -167,7 +133,7 @@
               </div>
               <div class="stats-info">
                 <div class="stats-number">{{ getVipCount() }}</div>
-                <div class="stats-label">VIP总数</div>
+                <div class="stats-label">CP总数</div>
               </div>
             </div>
           </el-card>
@@ -180,7 +146,7 @@
               </div>
               <div class="stats-info">
                 <div class="stats-number">{{ getMonthlyVipCount() }}</div>
-                <div class="stats-label">本月新增VIP</div>
+                <div class="stats-label">本月新增CP</div>
               </div>
             </div>
           </el-card>
@@ -286,16 +252,16 @@
                   </el-descriptions-item>
                 </template>
 
-                <!-- VIP会员信息 -->
+                <!-- CP会员信息 -->
                 <template v-if="props.row.is_vip">
-                  <el-descriptions-item label="VIP会员开通时间" :span="1">
+                  <el-descriptions-item label="CP会员开通时间" :span="1">
                     {{ props.row.vip_at || '-' }}
                   </el-descriptions-item>
-                  <el-descriptions-item label="VIP付款状态" :span="1">
+                  <el-descriptions-item label="CP付款状态" :span="1">
                     <el-tag type="success" v-if="props.row.is_vip_paid == 1">已完款</el-tag>
                     <el-tag type="warning" v-else>未完款</el-tag>
                   </el-descriptions-item>
-                  <el-descriptions-item v-if="props.row.is_vip_paid == 1" label="VIP完款时间" :span="2">
+                  <el-descriptions-item v-if="props.row.is_vip_paid == 1" label="CP完款时间" :span="2">
                     {{ props.row.vip_paid_at || '-' }}
                   </el-descriptions-item>
                 </template>
@@ -305,7 +271,13 @@
         </el-table-column>
         
         <el-table-column prop="id" label="ID" width="80" />
-        
+
+        <el-table-column label="微信昵称" width="150">
+          <template #default="scope">
+            <span class="nickname-cell">{{ scope.row.nickname || '-' }}</span>
+          </template>
+        </el-table-column>
+
         <el-table-column label="用户信息" width="200">
           <template #default="scope">
             <div class="user-info">
@@ -327,14 +299,6 @@
                   {{ scope.row.name || '未设置' }}
                 </div>
                 <div class="user-phone">{{ scope.row.phone || '无手机号' }}</div>
-                <div class="user-nickname" v-if="(scope.row.avatar || scope.row.nickname || scope.row.last_login_at || scope.row.last_login_time) && scope.row.nickname">
-                  <el-icon><User /></el-icon>
-                  {{ scope.row.nickname }}
-                </div>
-                <div class="user-wechat" v-else-if="scope.row.wechat_nickname">
-                  <el-icon><ChatDotRound /></el-icon>
-                  {{ scope.row.wechat_nickname }}
-                </div>
               </div>
             </div>
           </template>
@@ -366,7 +330,7 @@
                 <el-tag v-else-if="role === '工程师'" type="info" size="small">{{ role }}</el-tag>
                 <el-tag v-else-if="role === '净水器渠道商'" type="danger" size="small">{{ role }}</el-tag>
                 <el-tag v-else-if="role === '支付商户'" type="primary" size="small">{{ role }}</el-tag>
-                <el-tag v-else-if="role === 'VIP会员'" type="success" size="small" effect="dark">
+                <el-tag v-else-if="role === 'CP会员'" type="success" size="small" effect="dark">
                   {{ role }}
                   <span v-if="scope.row.is_vip_paid == 1" class="vip-status">
                     (已完款)
@@ -381,46 +345,7 @@
             </div>
           </template>
         </el-table-column>
-        
-        <el-table-column label="分支机构" width="120">
-          <template #default="scope">
-            <div class="branch-info">
-              <el-tag 
-                v-if="scope.row.branch && scope.row.branch.name" 
-                :type="scope.row.branch.id == 3 ? 'primary' : 'warning'" 
-                size="small"
-                effect="dark"
-              >
-                {{ scope.row.branch.name }}
-              </el-tag>
-              <el-tag 
-                v-else-if="scope.row.branch_id == 3" 
-                type="primary" 
-                size="small"
-                effect="dark"
-              >
-                点点够
-              </el-tag>
-              <el-tag 
-                v-else-if="scope.row.branch_id && scope.row.branch_id != 3" 
-                type="warning" 
-                size="small"
-                effect="dark"
-              >
-                {{ getBranchNameById(scope.row.branch_id) }}
-              </el-tag>
-              <el-tag 
-                v-else 
-                type="info" 
-                size="small"
-                effect="plain"
-              >
-                未分配
-              </el-tag>
-            </div>
-          </template>
-        </el-table-column>
-        
+
         <el-table-column label="时间信息" width="200">
           <template #default="scope">
             <div class="time-info">
@@ -611,7 +536,7 @@
                             <div class="referrer-tags">
                               <el-tag v-if="item.id === form.id" size="mini" type="danger">当前</el-tag>
                               <el-tag v-if="item.id === 0" size="mini" type="primary">系统</el-tag>
-                              <el-tag v-if="item.is_vip" size="mini" type="success" effect="dark">VIP</el-tag>
+                              <el-tag v-if="item.is_vip" size="mini" type="success" effect="dark">CP</el-tag>
                               <el-tag v-if="item.is_vip_paid == 1" size="mini" type="warning">已完款</el-tag>
                             </div>
                           </div>
@@ -697,7 +622,7 @@
                     <el-checkbox label="engineer">工程师</el-checkbox>
                     <el-checkbox label="water_purifier_agent">净水器渠道商</el-checkbox>
                     <el-checkbox label="pay_merchant">支付商户</el-checkbox>
-                    <el-checkbox label="vip">VIP会员</el-checkbox>
+                    <el-checkbox label="vip">CP会员</el-checkbox>
                     <el-checkbox label="salesman">业务员</el-checkbox>
                     <el-checkbox label="admin">管理员</el-checkbox>
                     <el-checkbox label="ytb_alliance_member" @change="handleAllianceChange">联盟CP</el-checkbox>
@@ -880,23 +805,23 @@
               </el-row>
             </template>
 
-            <!-- VIP会员信息 -->
+            <!-- CP会员信息 -->
             <template v-if="form.roles.includes('vip')">
-              <el-divider content-position="left">VIP会员信息</el-divider>
+              <el-divider content-position="left">CP会员信息</el-divider>
               <el-row :gutter="20">
                 <el-col :span="12">
-                  <el-form-item label="VIP开通时间" prop="vip_at">
+                  <el-form-item label="CP开通时间" prop="vip_at">
                     <el-date-picker
                       v-model="form.vip_at"
                       type="datetime"
-                      placeholder="选择VIP开通时间"
+                      placeholder="选择CP开通时间"
                       format="YYYY-MM-DD HH:mm:ss"
                       value-format="YYYY-MM-DD HH:mm:ss"
                     />
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
-                  <el-form-item label="VIP付款状态" prop="is_vip_paid">
+                  <el-form-item label="CP付款状态" prop="is_vip_paid">
                     <el-select v-model="form.is_vip_paid" placeholder="请选择付款状态">
                       <el-option :label="'未完款'" :value="0" />
                       <el-option :label="'已完款'" :value="1" />
@@ -906,11 +831,11 @@
               </el-row>
               <el-row :gutter="20" v-if="form.is_vip_paid == 1">
                 <el-col :span="12">
-                  <el-form-item label="VIP完款时间" prop="vip_paid_at">
+                  <el-form-item label="CP完款时间" prop="vip_paid_at">
                     <el-date-picker
                       v-model="form.vip_paid_at"
                       type="datetime"
-                      placeholder="选择VIP完款时间"
+                      placeholder="选择CP完款时间"
                       format="YYYY-MM-DD HH:mm:ss"
                       value-format="YYYY-MM-DD HH:mm:ss"
                     />
@@ -1104,7 +1029,7 @@ export default {
       last_login_ip: '',
       last_active_time: '',
       created_at: '',
-      // VIP会员相关字段
+      // CP会员相关字段
       vip_at: '',
       is_vip_paid: 0,
       vip_paid_at: ''
@@ -1567,7 +1492,7 @@ export default {
       form.last_active_time = row.last_active_time || '';
       form.created_at = row.created_at || '';
 
-      // VIP会员相关信息
+      // CP会员相关信息
       form.vip_at = row.vip_at || '';
       form.is_vip_paid = row.is_vip_paid === 1 ? 1 : 0;
       form.vip_paid_at = row.vip_paid_at || '';
@@ -1684,11 +1609,11 @@ export default {
         submitData.is_salesman = 1; // 确保每个用户都是业务员
         submitData.is_admin = submitData.roles.includes('admin') ? 1 : 0;
 
-        // 处理VIP会员时间格式，确保使用正确的日期时间格式
+        // 处理CP会员时间格式，确保使用正确的日期时间格式
         if (submitData.is_vip === 1) {
-          // 如果是VIP会员
+          // 如果是CP会员
           if (!submitData.vip_at) {
-            // 如果未设置VIP开通时间，使用当前时间
+            // 如果未设置CP开通时间，使用当前时间
             submitData.vip_at = formatDateTime(new Date());
           } else if (typeof submitData.vip_at !== 'string' || !submitData.vip_at.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
             // 如果不是标准格式，尝试格式化
@@ -1698,7 +1623,7 @@ export default {
                 submitData.vip_at = formatDateTime(vipDate);
               }
             } catch (error) {
-              console.error('VIP开通时间格式转换错误:', error);
+              console.error('CP开通时间格式转换错误:', error);
               // 如果转换失败，使用当前时间
               submitData.vip_at = formatDateTime(new Date());
             }
@@ -1710,7 +1635,7 @@ export default {
           // 处理支付状态
           if (submitData.is_vip_paid === 1) {
             if (!submitData.vip_paid_at) {
-              // 如果未设置VIP完款时间，使用当前时间
+              // 如果未设置CP完款时间，使用当前时间
               submitData.vip_paid_at = formatDateTime(new Date());
             } else if (typeof submitData.vip_paid_at !== 'string' || !submitData.vip_paid_at.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
               // 如果不是标准格式，尝试格式化
@@ -1720,7 +1645,7 @@ export default {
                   submitData.vip_paid_at = formatDateTime(vipPaidDate);
                 }
               } catch (error) {
-                console.error('VIP完款时间格式转换错误:', error);
+                console.error('CP完款时间格式转换错误:', error);
                 // 如果转换失败，使用当前时间
                 submitData.vip_paid_at = formatDateTime(new Date());
               }
@@ -1730,7 +1655,7 @@ export default {
             submitData.vip_paid_at = null;
           }
         } else {
-          // 如果不是VIP会员，清除相关字段
+          // 如果不是CP会员，清除相关字段
           submitData.is_vip_paid = 0;
           submitData.vip_at = null;
           submitData.vip_paid_at = null;
@@ -1835,7 +1760,7 @@ export default {
                 // 创建一个新对象，确保不修改原始对象
                 const newUser = {
                   ...user,
-                  is_vip: user.is_vip || (user.role_names?.includes('VIP会员') ? 1 : 0)
+                  is_vip: user.is_vip || (user.role_names?.includes('CP会员') ? 1 : 0)
                 };
                 userOptions.value.push(newUser);
               }
@@ -2284,7 +2209,7 @@ export default {
       }
     };
 
-    // VIP付款状态变化处理
+    // CP付款状态变化处理
     const handleVipPaidStatusChange = (value) => {
       form.is_vip_paid = value;
 

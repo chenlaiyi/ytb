@@ -155,7 +155,7 @@ const routesConfig = [
                         path: 'vip-users',
                         name: 'BranchMembersVipUsers',
                         component: () => import('../views/branch/members/VipUsers.vue'),
-                        meta: { title: 'VIP会员', icon: 'trophy' }
+                        meta: { title: 'CP会员', icon: 'trophy' }
                     },
                     {
                         path: 'salesman',
@@ -217,7 +217,7 @@ const routesConfig = [
                 path: 'vip',
                 name: 'BranchVip',
                 component: () => import('../views/branch-standalone/vip/List.vue'),
-                meta: { title: 'VIP管理', icon: 'trophy' }
+                meta: { title: 'CP管理', icon: 'trophy' }
             },
             // 业务统计
             {
@@ -552,37 +552,37 @@ const routesConfig = [
                         path: 'vip-list',
                         name: 'VipList',
                         component: () => import('../views/users/vip-members/List.vue'),
-                        meta: { title: 'VIP会员', icon: 'gold-medal' }
+                        meta: { title: 'CP会员', icon: 'gold-medal' }
                     },
                     {
                         path: 'vip-dividends',
                         name: 'VipDividends',
                         component: () => import('../views/users/vip-members/Dividends.vue'),
-                        meta: { title: 'VIP分红管理', icon: 'money' }
+                        meta: { title: 'CP分红管理', icon: 'money' }
                     },
                     {
                         path: 'vip-rankings',
                         name: 'VipRankings',
                         component: () => import('../views/users/vip-members/Rankings.vue'),
-                        meta: { title: 'VIP排行榜', icon: 'trophy' }
+                        meta: { title: 'CP排行榜', icon: 'trophy' }
                     },
                     {
                         path: 'vip-balance',
                         name: 'VipBalance',
                         component: () => import('../views/users/vip-members/Balance.vue'),
-                        meta: { title: 'VIP余额管理', icon: 'wallet' }
+                        meta: { title: 'CP余额管理', icon: 'wallet' }
                     },
                     {
                         path: 'vip-levels',
                         name: 'VipLevels',
                         component: () => import('../views/users/vip-members/Levels.vue'),
-                        meta: { title: 'VIP等级管理', icon: 'star' }
+                        meta: { title: 'CP等级管理', icon: 'star' }
                     },
                     {
                         path: 'vip-statistics',
                         name: 'VipStatistics',
                         component: () => import('../views/users/vip-members/Statistics.vue'),
-                        meta: { title: 'VIP统计分析', icon: 'data-analysis' }
+                        meta: { title: 'CP统计分析', icon: 'data-analysis' }
                     },
                     // 模拟登录
                     {
@@ -1009,9 +1009,7 @@ const routesConfig = [
                     },
                     {
                         path: 'users',
-                        name: 'YtbUsers',
-                        component: () => import('../views/ytb/Users.vue'),
-                        meta: { title: '用户管理', icon: 'User' }
+                        redirect: '/users/app-users'
                     },
                     {
                         path: 'upgrades',

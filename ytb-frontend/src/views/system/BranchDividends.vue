@@ -3,7 +3,7 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <h1>分公司分红配置管理</h1>
-      <p>管理分支机构的VIP招募和设备充值分红配置规则</p>
+      <p>管理分支机构的CP招募和设备充值分红配置规则</p>
       <div class="header-actions">
         <el-button type="success" @click="exportData" :loading="exporting">
           <el-icon><Download /></el-icon>
@@ -138,8 +138,8 @@
           </template>
         </el-table-column>
         
-        <!-- VIP分红配置 -->
-        <el-table-column label="VIP分红配置" min-width="280">
+        <!-- CP分红配置 -->
+        <el-table-column label="CP分红配置" min-width="280">
           <template #default="{ row }">
             <div class="dividend-config">
               <div class="config-item">
@@ -262,8 +262,8 @@
           </el-select>
         </el-form-item>
         
-        <!-- VIP分红配置 -->
-        <el-divider content-position="left">VIP招募分红配置</el-divider>
+        <!-- CP分红配置 -->
+        <el-divider content-position="left">CP招募分红配置</el-divider>
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="初级达标要求" prop="vip_junior_requirement">
@@ -497,9 +497,9 @@
     >
       <div v-if="previewData" class="preview-content">
         <el-tabs v-model="activePreviewTab">
-          <el-tab-pane label="VIP分红预览" name="vip">
+          <el-tab-pane label="CP分红预览" name="vip">
             <div class="preview-section">
-              <h4>VIP招募分红配置预览</h4>
+              <h4>CP招募分红配置预览</h4>
               <el-table :data="previewData.vip" border>
                 <el-table-column prop="level" label="分红等级" width="100">
                   <template #default="{ row }">
@@ -561,7 +561,7 @@
           </el-form-item>
           
           <template v-if="batchForm.action === 'update_pool'">
-            <el-divider content-position="left">VIP分红基数</el-divider>
+            <el-divider content-position="left">CP分红基数</el-divider>
             <el-row :gutter="20">
               <el-col :span="8">
                 <el-form-item label="初级基数">

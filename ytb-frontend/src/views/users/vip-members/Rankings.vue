@@ -3,8 +3,8 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-title">
-        <h2>VIP排行榜</h2>
-        <p>查看VIP会员在各个维度的排名情况</p>
+        <h2>CP排行榜</h2>
+        <p>查看CP会员在各个维度的排名情况</p>
       </div>
       <div class="page-actions">
         <el-button type="success" @click="exportRankings" :loading="exportLoading">
@@ -18,54 +18,54 @@
       </div>
     </div>
 
-    <!-- VIP会员模块导航标签页 -->
+    <!-- CP会员模块导航标签页 -->
     <el-card class="navigation-card" shadow="never">
       <el-tabs v-model="activeTab" @tab-click="handleTabClick" class="vip-tabs">
-        <el-tab-pane label="VIP会员列表" name="list">
+        <el-tab-pane label="CP会员列表" name="list">
           <template #label>
             <span class="tab-label">
               <el-icon><User /></el-icon>
-              VIP会员列表
+              CP会员列表
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP分红管理" name="dividends">
+        <el-tab-pane label="CP分红管理" name="dividends">
           <template #label>
             <span class="tab-label">
               <el-icon><Money /></el-icon>
-              VIP分红管理
+              CP分红管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP排行榜" name="rankings">
+        <el-tab-pane label="CP排行榜" name="rankings">
           <template #label>
             <span class="tab-label">
               <el-icon><Trophy /></el-icon>
-              VIP排行榜
+              CP排行榜
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP余额管理" name="balance">
+        <el-tab-pane label="CP余额管理" name="balance">
           <template #label>
             <span class="tab-label">
               <el-icon><Wallet /></el-icon>
-              VIP余额管理
+              CP余额管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP等级管理" name="levels">
+        <el-tab-pane label="CP等级管理" name="levels">
           <template #label>
             <span class="tab-label">
               <el-icon><Star /></el-icon>
-              VIP等级管理
+              CP等级管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP统计分析" name="statistics">
+        <el-tab-pane label="CP统计分析" name="statistics">
           <template #label>
             <span class="tab-label">
               <el-icon><DataAnalysis /></el-icon>
-              VIP统计分析
+              CP统计分析
             </span>
           </template>
         </el-tab-pane>
@@ -96,7 +96,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-value">{{ Math.round(rankingStats.avg_team_vip || 0) }}</div>
-                <div class="stat-label">平均团队VIP</div>
+                <div class="stat-label">平均团队CP</div>
               </div>
             </div>
           </el-card>
@@ -150,12 +150,12 @@
         <div class="filter-item">
           <label>排名维度：</label>
           <el-select v-model="rankBy" @change="changeRankBy" placeholder="选择排名维度">
-            <el-option label="团队VIP数量" value="team_vip_count" />
-            <el-option label="直推VIP数量" value="direct_vip_count" />
+            <el-option label="团队CP数量" value="team_vip_count" />
+            <el-option label="直推CP数量" value="direct_vip_count" />
             <el-option label="账户余额" value="balance" />
-            <el-option label="本月新增团队VIP" value="month_team_vip" />
-            <el-option label="上月新增团队VIP" value="last_month_team_vip" />
-            <el-option label="本月直推VIP" value="month_direct_vip" />
+            <el-option label="本月新增团队CP" value="month_team_vip" />
+            <el-option label="上月新增团队CP" value="last_month_team_vip" />
+            <el-option label="本月直推CP" value="month_direct_vip" />
           </el-select>
         </div>
         <div class="filter-item">
@@ -226,13 +226,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="团队VIP" width="100" align="center">
+        <el-table-column label="团队CP" width="100" align="center">
           <template #default="{ row }">
             <el-tag type="primary" size="small">{{ row.team_vip_count }}</el-tag>
           </template>
         </el-table-column>
 
-        <el-table-column label="直推VIP" width="100" align="center">
+        <el-table-column label="直推CP" width="100" align="center">
           <template #default="{ row }">
             <el-tag type="success" size="small">{{ row.direct_vip_count }}</el-tag>
           </template>
@@ -284,7 +284,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="VIP完款时间" width="150" align="center">
+        <el-table-column label="CP完款时间" width="150" align="center">
           <template #default="{ row }">
             <span>{{ formatDate(row.vip_paid_at) }}</span>
           </template>
@@ -318,11 +318,11 @@
             </div>
             <div class="team-stats">
               <div class="stat-item">
-                <span class="stat-label">团队VIP总数：</span>
+                <span class="stat-label">团队CP总数：</span>
                 <span class="stat-value">{{ teamData.team_stats.total_team_vip }}人</span>
               </div>
               <div class="stat-item">
-                <span class="stat-label">直推VIP数：</span>
+                <span class="stat-label">直推CP数：</span>
                 <span class="stat-value">{{ teamData.team_stats.direct_vip }}人</span>
               </div>
               <div class="stat-item">
@@ -386,7 +386,7 @@ const searchQuery = ref('')
 const rankingStats = ref({})
 let searchTimer = null
 
-// VIP会员模块导航标签页
+// CP会员模块导航标签页
 const activeTab = ref('rankings')
 
 // 团队关系树相关
@@ -401,12 +401,12 @@ const teamData = reactive({
 // 方法
 const getRankByText = () => {
   const texts = {
-    'team_vip_count': '团队VIP数量',
-    'direct_vip_count': '直推VIP数量',
+    'team_vip_count': '团队CP数量',
+    'direct_vip_count': '直推CP数量',
     'balance': '账户余额',
-    'month_team_vip': '本月新增团队VIP',
-    'last_month_team_vip': '上月新增团队VIP',
-    'month_direct_vip': '本月直推VIP',
+    'month_team_vip': '本月新增团队CP',
+    'last_month_team_vip': '上月新增团队CP',
+    'month_direct_vip': '本月直推CP',
     'total_dividend': '累计分红金额',
     'month_dividend': '本月分红金额',
     'team_recharge_count': '团队充值设备'
@@ -544,7 +544,7 @@ const exportRankings = async () => {
     // 创建隐藏的下载链接
     const link = document.createElement('a')
     link.href = exportUrl
-    link.download = `VIP排行榜_${getRankByText()}_${new Date().toLocaleDateString()}.xls`
+    link.download = `CP排行榜_${getRankByText()}_${new Date().toLocaleDateString()}.xls`
     link.style.display = 'none'
     document.body.appendChild(link)
     link.click()
@@ -559,7 +559,7 @@ const exportRankings = async () => {
   }
 }
 
-// 处理VIP会员模块导航标签页点击
+// 处理CP会员模块导航标签页点击
 const handleTabClick = (tab) => {
   const tabName = tab.props.name;
   

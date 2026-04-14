@@ -36,7 +36,7 @@
             style="width: 120px"
           >
             <el-option label="普通用户" value="normal" />
-            <el-option label="VIP用户" value="vip" />
+            <el-option label="CP用户" value="vip" />
             <el-option label="业务员" value="salesman" />
           </el-select>
         </el-form-item>
@@ -91,7 +91,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-number">{{ stats.vip_users || 0 }}</div>
-          <div class="stat-label">VIP用户</div>
+          <div class="stat-label">CP用户</div>
         </div>
       </div>
       <div class="stat-card">
@@ -255,7 +255,7 @@
               <p>手机号：{{ currentUser.phone }}</p>
               <p>登录名：{{ currentUser.login_name }}</p>
               <div class="user-tags">
-                <el-tag v-if="currentUser.is_vip" type="warning">VIP用户</el-tag>
+                <el-tag v-if="currentUser.is_vip" type="warning">CP用户</el-tag>
                 <el-tag v-if="currentUser.is_salesman" type="success">业务员</el-tag>
                 <el-tag :type="currentUser.status === 'active' ? 'success' : 'danger'">
                   {{ currentUser.status === 'active' ? '正常' : '禁用' }}
@@ -284,12 +284,12 @@
           </el-descriptions>
         </div>
 
-        <!-- VIP信息 -->
+        <!-- CP信息 -->
         <div v-if="currentUser.is_vip" class="detail-section">
-          <h3>VIP信息</h3>
+          <h3>CP信息</h3>
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="VIP等级">
-              {{ currentUser.vip_level || '普通VIP' }}
+            <el-descriptions-item label="CP等级">
+              {{ currentUser.vip_level || '普通CP' }}
             </el-descriptions-item>
             <el-descriptions-item label="开通时间">
               {{ formatDateTime(currentUser.vip_start_time) }}

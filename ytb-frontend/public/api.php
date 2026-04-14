@@ -324,6 +324,285 @@ try {
         exit;
     }
 
+    // CP会员列表 (vip_list.php) - 兼容旧API路径
+    if ($path === 'Tapp/admin/api/user/vip_list.php' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+        $search = trim($_GET['search'] ?? '');
+
+        // 获取CP会员总数 (team_cp 和 boss_cp)
+        $countSql = "SELECT COUNT(*) as total FROM ytb_users WHERE (role = 'team_cp' OR role = 'boss_cp')";
+        if ($search) {
+            $countSql .= " AND (name LIKE ? OR nickname LIKE ? OR mobile LIKE ?)";
+        }
+        $countStmt = $db->prepare($countSql);
+        if ($search) {
+            $searchParam = "%{$search}%";
+            $countStmt->execute([$searchParam, $searchParam, $searchParam]);
+        } else {
+            $countStmt->execute();
+        }
+        $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 获取CP会员列表
+        $listSql = "SELECT u.*,
+            CASE WHEN u.role = 'team_cp' THEN 'VIPCP' WHEN u.role = 'boss_cp' THEN 'BossCP' ELSE 'CP' END as cp_level,
+            CASE WHEN u.role = 'team_cp' THEN 2 WHEN u.role = 'boss_cp' THEN 3 ELSE 1 END as cp_level_sort
+            FROM ytb_users u
+            WHERE (u.role = 'team_cp' OR u.role = 'boss_cp')";
+        if ($search) {
+            $listSql .= " AND (u.name LIKE ? OR u.nickname LIKE ? OR u.mobile LIKE ?)";
+        }
+        $listSql .= " ORDER BY u.created_at DESC LIMIT {$offset}, {$limit}";
+
+        $listStmt = $db->prepare($listSql);
+        if ($search) {
+            $searchParam = "%{$search}%";
+            $listStmt->execute([$searchParam, $searchParam, $searchParam]);
+        } else {
+            $listStmt->execute();
+        }
+        $users = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 获取推荐人信息
+        $userIds = array_column($users, 'id');
+        $referrers = [];
+        if (!empty($userIds)) {
+            $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+            $refStmt = $db->prepare("SELECT id, name, nickname FROM ytb_users WHERE id IN ({$placeholders})");
+            $refStmt->execute($userIds);
+            foreach ($refStmt->fetchAll(PDO::FETCH_ASSOC) as $ref) {
+                $referrers[$ref['id']] = $ref;
+            }
+        }
+
+        // 处理用户数据，添加推荐人信息和团队统计
+        $processedUsers = [];
+        foreach ($users as $u) {
+            $referrerId = $u['referrer_id'] ?? 0;
+            $processedUsers[] = [
+                'id' => $u['id'],
+                'name' => $u['name'] ?: '未设置',
+                'nickname' => $u['nickname'] ?: '',
+                'mobile' => $u['mobile'] ?: '',
+                'phone' => $u['mobile'] ?: '',
+                'avatar' => $u['avatar'] ?: '',
+                'wechat_avatar' => $u['wechat_avatar'] ?: '',
+                'balance' => $u['balance'] ?: '0.00',
+                'referrer_id' => $referrerId,
+                'referrer_name' => ($referrerId && isset($referrers[$referrerId])) ? ($referrers[$referrerId]['name'] ?: $referrers[$referrerId]['nickname'] ?: '未知') : null,
+                'direct_vip_count' => 0,
+                'team_vip_count' => 0,
+                'month_direct_vip' => 0,
+                'month_team_vip' => 0,
+                'last_month_direct_vip' => 0,
+                'last_month_team_vip' => 0,
+                'vip_at' => $u['vip_at'] ?? '',
+                'vip_paid_at' => $u['vip_paid_at'] ?? '',
+                'created_at' => $u['created_at'] ?? '',
+                'cp_level' => $u['cp_level'] ?? 'CP',
+                'is_vip' => 1,
+                'is_vip_paid' => ($u['vip_paid_at'] ?? '') !== '' ? 1 : 0,
+            ];
+        }
+
+        // 统计数据
+        $monthStart = date('Y-m-01 00:00:00');
+        $lastMonthStart = date('Y-m-01 00:00:00', strtotime('first day of last month'));
+        $lastMonthEnd = date('Y-m-01 00:00:00');
+
+        $statsSql = "SELECT
+            COUNT(CASE WHEN role = 'team_cp' OR role = 'boss_cp' THEN 1 END) as total_vip,
+            COUNT(CASE WHEN (role = 'team_cp' OR role = 'boss_cp') AND created_at >= ? THEN 1 END) as month_new_vip,
+            COUNT(CASE WHEN (role = 'team_cp' OR role = 'boss_cp') AND created_at >= ? AND created_at < ? THEN 1 END) as last_month_new_vip,
+            COALESCE(SUM(balance), 0) as total_balance
+            FROM ytb_users WHERE role = 'team_cp' OR role = 'boss_cp'";
+
+        $statsStmt = $db->prepare($statsSql);
+        $statsStmt->execute([$monthStart, $lastMonthStart, $lastMonthEnd]);
+        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'code' => 0,
+            'message' => 'success',
+            'data' => [
+                'list' => $processedUsers,
+                'total' => $total,
+                'stats' => [
+                    'total_vip' => (int)($stats['total_vip'] ?? 0),
+                    'month_new_vip' => (int)($stats['month_new_vip'] ?? 0),
+                    'last_month_new_vip' => (int)($stats['last_month_new_vip'] ?? 0),
+                    'total_balance' => number_format((float)($stats['total_balance'] ?? 0), 2, '.', ''),
+                ]
+            ]
+        ]);
+        exit;
+    }
+
+    // 分支机构选项列表
+    if ($path === 'admin/v1/branch-organizations/options' && $method === 'GET') {
+        // 表可能不存在，返回空数组
+        try {
+            $stmt = $db->query("SELECT id, name, code FROM ytb_branch_organizations WHERE status = 'active' ORDER BY id ASC");
+            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $items = [];
+        }
+        echo json_encode(['code' => 0, 'message' => '操作成功', 'data' => $items]);
+        exit;
+    }
+
+    // APP用户列表
+    if ($path === 'admin/v1/app-users' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, intval($_GET['per_page'] ?? 10)));
+        $offset = ($page - 1) * $perPage;
+
+        $where = [];
+        $params = [];
+
+        if (!empty($_GET['keyword'])) {
+            $where[] = "(real_name LIKE ? OR nickname LIKE ? OR phone LIKE ?)";
+            $params[] = "%{$_GET['keyword']}%";
+            $params[] = "%{$_GET['keyword']}%";
+            $params[] = "%{$_GET['keyword']}%";
+        }
+        if (!empty($_GET['role'])) {
+            $where[] = "role = ?";
+            $params[] = $_GET['role'];
+        }
+        if (!empty($_GET['status'])) {
+            $where[] = "status = ?";
+            $params[] = $_GET['status'];
+        }
+        if (!empty($_GET['date_start'])) {
+            $where[] = "created_at >= ?";
+            $params[] = $_GET['date_start'] . ' 00:00:00';
+        }
+        if (!empty($_GET['date_end'])) {
+            $where[] = "created_at <= ?";
+            $params[] = $_GET['date_end'] . ' 23:59:59';
+        }
+
+        $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        // 总数
+        $countSql = "SELECT COUNT(*) as total FROM ytb_users {$whereSql}";
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 列表
+        $listSql = "SELECT * FROM ytb_users {$whereSql} ORDER BY created_at DESC LIMIT {$offset}, {$perPage}";
+        $listStmt = $db->prepare($listSql);
+        $listStmt->execute($params);
+        $users = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 获取推荐人信息
+        $parentIds = array_filter(array_column($users, 'parent_id'));
+        $referrers = [];
+        if (!empty($parentIds)) {
+            $placeholders = implode(',', array_fill(0, count($parentIds), '?'));
+            $refStmt = $db->prepare("SELECT id, real_name, nickname FROM ytb_users WHERE id IN ({$placeholders})");
+            $refStmt->execute(array_values($parentIds));
+            foreach ($refStmt->fetchAll(PDO::FETCH_ASSOC) as $ref) {
+                $referrers[$ref['id']] = $ref;
+            }
+        }
+
+        // 处理用户数据
+        $processedUsers = [];
+        foreach ($users as $u) {
+            $parentId = $u['parent_id'] ?? 0;
+            $referrerName = null;
+            if ($parentId && isset($referrers[$parentId])) {
+                $referrerName = $referrers[$parentId]['real_name'] ?: $referrers[$parentId]['nickname'] ?: '未知';
+            }
+
+            // 角色标签
+            $roleNames = [];
+            if ($u['role'] === 'normal') $roleNames[] = '普通用户';
+            elseif ($u['role'] === 'scp') $roleNames[] = 'CP伙伴';
+            elseif ($u['role'] === 'team_cp') $roleNames[] = 'CP会员';
+            elseif ($u['role'] === 'boss_cp') $roleNames[] = 'CP会员';
+
+            $processedUsers[] = [
+                'id' => $u['id'],
+                'name' => $u['real_name'] ?: '未设置',
+                'nickname' => $u['nickname'] ?: '',
+                'wechat_nickname' => $u['nickname'] ?: '',
+                'phone' => $u['phone'] ?: '',
+                'avatar' => $u['avatar'] ?: '',
+                'wechat_avatar' => $u['avatar'] ?: '',
+                'display_avatar' => $u['avatar'] ?: '',
+                'status' => $u['status'] ?: 'active',
+                'role' => $u['role'] ?: 'normal',
+                'role_names' => $roleNames,
+                'referrer_id' => $parentId,
+                'referrer_name' => $referrerName,
+                'referrer_name' => $referrerName,
+                'is_vip' => ($u['role'] === 'team_cp' || $u['role'] === 'boss_cp') ? 1 : 0,
+                'vip_at' => $u['role_upgraded_at'] ?? '',
+                'created_at' => $u['created_at'] ?? '',
+                'last_login_time' => '',
+                'last_login_at' => '',
+                'balance' => $u['available_balance'] ?? '0.00',
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '操作成功',
+            'data' => [
+                'list' => $processedUsers,
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage
+            ]
+        ]);
+        exit;
+    }
+
+    // APP用户统计
+    if ($path === 'admin/v1/app-users/statistics' && $method === 'GET') {
+        $todayStart = date('Y-m-d 00:00:00');
+        $monthStart = date('Y-m-01 00:00:00');
+        $yesterdayStart = date('Y-m-d 00:00:00', strtotime('-1 day'));
+
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_users");
+        $total = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as today FROM ytb_users WHERE created_at >= ?");
+        $stmt->execute([$todayStart]);
+        $todayUsers = (int)$stmt->fetch(PDO::FETCH_ASSOC)['today'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as yesterday FROM ytb_users WHERE created_at >= ? AND created_at < ?");
+        $stmt->execute([$yesterdayStart, $todayStart]);
+        $yesterdayUsers = (int)$stmt->fetch(PDO::FETCH_ASSOC)['yesterday'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as vip_total FROM ytb_users WHERE role IN ('team_cp', 'boss_cp')");
+        $stmt->execute();
+        $vipTotal = (int)$stmt->fetch(PDO::FETCH_ASSOC)['vip_total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as month_vip FROM ytb_users WHERE (role IN ('team_cp', 'boss_cp')) AND created_at >= ?");
+        $stmt->execute([$monthStart]);
+        $monthVip = (int)$stmt->fetch(PDO::FETCH_ASSOC)['month_vip'] ?? 0;
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '操作成功',
+            'data' => [
+                'total' => $total,
+                'today_users' => $todayUsers,
+                'yesterday_users' => $yesterdayUsers,
+                'vip_total' => $vipTotal,
+                'month_vip' => $monthVip
+            ]
+        ]);
+        exit;
+    }
+
     // 404
     http_response_code(404);
     echo json_encode(['code' => 404, 'message' => '接口不存在']);
@@ -340,11 +619,13 @@ function buildMenuTree($menus, $parentId = 0) {
             $children = buildMenuTree($menus, $menu['id']);
             $item = [
                 'id' => $menu['id'],
-                'name' => $menu['title'],
                 'path' => $menu['path'],
-                'icon' => $menu['icon'],
                 'component' => $menu['path'],
-                'sort' => $menu['sort_order'],
+                'meta' => [
+                    'title' => $menu['title'] ?: '未命名',
+                    'icon' => $menu['icon'] ?: 'Menu',
+                ],
+                'sort' => $menu['sort_order'] ?? 0,
             ];
             if (!empty($children)) {
                 $item['children'] = $children;

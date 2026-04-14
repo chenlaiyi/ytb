@@ -59,7 +59,7 @@
               <span>会员</span>
             </template>
             <el-menu-item :index="`/branch/${branchId}/members/app-users`">APP会员</el-menu-item>
-            <el-menu-item :index="`/branch/${branchId}/members/vip-users`">VIP会员</el-menu-item>
+            <el-menu-item :index="`/branch/${branchId}/members/vip-users`">CP会员</el-menu-item>
             <el-menu-item :index="`/branch/${branchId}/members/salesman`">业务员管理</el-menu-item>
           </el-sub-menu>
           

@@ -34,7 +34,7 @@
       <el-col :xs="24" :md="12">
         <el-card class="chart-card" shadow="never">
           <template #header>
-            <span>VIP分红统计</span>
+            <span>CP分红统计</span>
           </template>
           <div ref="dividendChart" class="chart-container"></div>
         </el-card>
@@ -74,7 +74,7 @@
       <el-col :xs="24" :md="8">
         <el-card class="stats-card" shadow="never">
           <template #header>
-            <span>VIP招募排行</span>
+            <span>CP招募排行</span>
           </template>
           <div class="ranking-list">
             <div class="ranking-item" v-for="(item, index) in topRecruiters" :key="item.id">
@@ -90,13 +90,13 @@
       </el-col>
     </el-row>
 
-    <!-- VIP分红详情 -->
+    <!-- CP分红详情 -->
     <el-row :gutter="20" class="dividend-row">
       <el-col :xs="24">
         <el-card class="dividend-card" shadow="never">
           <template #header>
             <div class="card-header">
-              <span>VIP分红详情</span>
+              <span>CP分红详情</span>
               <el-tag type="success" size="small">本月分红池: ¥{{ (data.dividend_pool || 0).toLocaleString() }}</el-tag>
             </div>
           </template>
@@ -168,8 +168,8 @@ const memberMetrics = computed(() => [
   },
   {
     key: 'vipMembers',
-    title: 'VIP会员数',
-    subtitle: `VIP率 ${props.data.vip_rate || 0}%`,
+    title: 'CP会员数',
+    subtitle: `CP率 ${props.data.vip_rate || 0}%`,
     value: props.data.vip_members || 0,
     type: 'number',
     icon: Avatar,
@@ -198,7 +198,7 @@ const memberMetrics = computed(() => [
 // 活跃度统计
 const activityStats = computed(() => props.data.activity_stats || [])
 
-// VIP招募排行
+// CP招募排行
 const topRecruiters = computed(() => props.data.top_recruiters || [])
 
 // 分红等级统计
@@ -223,7 +223,7 @@ const initMemberGrowthChart = () => {
       axisPointer: { type: 'cross' }
     },
     legend: {
-      data: ['普通会员', 'VIP会员']
+      data: ['普通会员', 'CP会员']
     },
     grid: {
       left: '3%',
@@ -253,7 +253,7 @@ const initMemberGrowthChart = () => {
         }
       },
       {
-        name: 'VIP会员',
+        name: 'CP会员',
         type: 'line',
         smooth: true,
         data: props.data.member_trend?.vip || [],
@@ -270,7 +270,7 @@ const initMemberGrowthChart = () => {
   memberGrowthChartInstance.setOption(option)
 }
 
-// 初始化VIP分红统计图表
+// 初始化CP分红统计图表
 const initDividendChart = () => {
   if (!dividendChart.value) return
   

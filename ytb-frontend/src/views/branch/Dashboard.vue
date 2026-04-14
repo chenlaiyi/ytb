@@ -31,7 +31,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-value">67</div>
-            <div class="stat-label">VIP用户数</div>
+            <div class="stat-label">CP用户数</div>
             <div class="stat-change positive">
               <el-icon><ArrowUp /></el-icon>
               +0
@@ -355,7 +355,7 @@ const initDeviceChart = (userTypeStats) => {
   
   const data = [
     { value: userTypeStats.regular, name: '普通用户' },
-    { value: userTypeStats.vip, name: 'VIP用户' },
+    { value: userTypeStats.vip, name: 'CP用户' },
     { value: userTypeStats.salesman, name: '业务员' }
   ]
   
@@ -375,7 +375,7 @@ const initDeviceChart = (userTypeStats) => {
     legend: {
       orient: 'horizontal',
       bottom: 10,
-      data: ['普通用户', 'VIP用户', '业务员']
+      data: ['普通用户', 'CP用户', '业务员']
     },
     series: [
       {

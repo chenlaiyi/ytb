@@ -3,8 +3,8 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-title">
-        <h2>VIP会员管理</h2>
-        <p class="page-description">管理和查看所有VIP会员信息</p>
+        <h2>CP会员管理</h2>
+        <p class="page-description">管理和查看所有CP会员信息</p>
       </div>
       <div class="page-actions">
         <el-date-picker
@@ -23,54 +23,54 @@
       </div>
     </div>
 
-    <!-- VIP会员模块导航标签页 -->
+    <!-- CP会员模块导航标签页 -->
     <el-card class="navigation-card" shadow="never">
       <el-tabs v-model="activeTab" @tab-click="handleTabClick" class="vip-tabs">
-        <el-tab-pane label="VIP会员列表" name="list">
+        <el-tab-pane label="CP会员列表" name="list">
           <template #label>
             <span class="tab-label">
               <el-icon><User /></el-icon>
-              VIP会员列表
+              CP会员列表
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP分红管理" name="dividends">
+        <el-tab-pane label="CP分红管理" name="dividends">
           <template #label>
             <span class="tab-label">
               <el-icon><Money /></el-icon>
-              VIP分红管理
+              CP分红管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP排行榜" name="rankings">
+        <el-tab-pane label="CP排行榜" name="rankings">
           <template #label>
             <span class="tab-label">
               <el-icon><Trophy /></el-icon>
-              VIP排行榜
+              CP排行榜
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP余额管理" name="balance">
+        <el-tab-pane label="CP余额管理" name="balance">
           <template #label>
             <span class="tab-label">
               <el-icon><Wallet /></el-icon>
-              VIP余额管理
+              CP余额管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP等级管理" name="levels">
+        <el-tab-pane label="CP等级管理" name="levels">
           <template #label>
             <span class="tab-label">
               <el-icon><Star /></el-icon>
-              VIP等级管理
+              CP等级管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP统计分析" name="statistics">
+        <el-tab-pane label="CP统计分析" name="statistics">
           <template #label>
             <span class="tab-label">
               <el-icon><DataAnalysis /></el-icon>
-              VIP统计分析
+              CP统计分析
             </span>
           </template>
         </el-tab-pane>
@@ -174,11 +174,11 @@
           </el-card>
         </el-col>
         
-        <!-- VIP等级分布 -->
+        <!-- CP等级分布 -->
         <el-col :xs="24" :lg="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <h3>VIP等级分布</h3>
+              <h3>CP等级分布</h3>
             </template>
             <div ref="levelChartRef" class="chart-container"></div>
           </el-card>
@@ -239,7 +239,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="新增VIP" width="120" align="center">
+        <el-table-column label="新增CP" width="120" align="center">
           <template #default="{ row }">
             <el-tag type="success" size="small">{{ row.new_vips }}</el-tag>
           </template>
@@ -315,7 +315,7 @@ const tableLimit = ref(20)
 const tableTotal = ref(0)
 const tableData = ref([])
 
-// VIP会员模块导航标签页
+// CP会员模块导航标签页
 const activeTab = ref('statistics')
 
 // 统计数据
@@ -369,7 +369,7 @@ const getActivityColor = (rate) => {
 const getTableColumnLabel = () => {
   const labels = {
     'date': '日期',
-    'level': 'VIP等级',
+    'level': 'CP等级',
     'region': '地区',
     'source': '来源渠道'
   }
@@ -433,7 +433,7 @@ const loadTrendData = async () => {
           axisPointer: { type: 'cross' }
         },
         legend: {
-          data: ['新增VIP', '收入'],
+          data: ['新增CP', '收入'],
           bottom: 10
         },
         xAxis: {
@@ -455,7 +455,7 @@ const loadTrendData = async () => {
         ],
         series: [
           {
-            name: '新增VIP',
+            name: '新增CP',
             type: 'line',
             data: vipCounts,
             smooth: true,
@@ -489,7 +489,7 @@ const loadLevelData = async () => {
     if (levelChart) {
       levelChart.setOption({
         title: {
-          text: 'VIP等级分布',
+          text: 'CP等级分布',
           left: 'center',
           textStyle: { fontSize: 16, color: '#303133' }
         },
@@ -503,7 +503,7 @@ const loadLevelData = async () => {
         },
         series: [
           {
-            name: 'VIP等级',
+            name: 'CP等级',
             type: 'pie',
             radius: ['40%', '70%'],
             center: ['60%', '50%'],
@@ -704,7 +704,7 @@ const refreshData = () => {
   loadTableData()
 }
 
-// 处理VIP会员模块导航标签页点击
+// 处理CP会员模块导航标签页点击
 const handleTabClick = (tab) => {
   const tabName = tab.props.name;
   
@@ -801,7 +801,7 @@ onMounted(() => {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
-/* VIP会员模块导航标签页 */
+/* CP会员模块导航标签页 */
 .navigation-card {
   margin-bottom: 20px;
   border-radius: 12px;

@@ -3,8 +3,8 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-content">
-        <h1 class="page-title">VIP管理</h1>
-        <p class="page-description">管理分支机构的VIP用户和分红</p>
+        <h1 class="page-title">CP管理</h1>
+        <p class="page-description">管理分支机构的CP用户和分红</p>
       </div>
       <div class="header-actions">
         <el-button @click="refreshData" :icon="Refresh">
@@ -28,16 +28,16 @@
             @keyup.enter="handleSearch"
           />
         </el-form-item>
-        <el-form-item label="VIP等级:">
+        <el-form-item label="CP等级:">
           <el-select 
             v-model="filterForm.vip_level" 
             placeholder="选择等级"
             clearable
             style="width: 120px"
           >
-            <el-option label="普通VIP" value="normal" />
-            <el-option label="高级VIP" value="premium" />
-            <el-option label="钻石VIP" value="diamond" />
+            <el-option label="普通CP" value="normal" />
+            <el-option label="高级CP" value="premium" />
+            <el-option label="钻石CP" value="diamond" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态:">
@@ -63,7 +63,7 @@
       </el-form>
     </el-card>
 
-    <!-- VIP统计卡片 -->
+    <!-- CP统计卡片 -->
     <div class="stats-cards">
       <div class="stat-card">
         <div class="stat-icon">
@@ -132,7 +132,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="VIP信息" width="180">
+        <el-table-column label="CP信息" width="180">
           <template #default="{ row }">
             <div class="vip-info">
               <div class="vip-period">
@@ -235,10 +235,10 @@
       </div>
     </el-card>
 
-    <!-- VIP详情对话框 -->
+    <!-- CP详情对话框 -->
     <el-drawer
       v-model="vipDetailVisible"
-      title="VIP详情"
+      title="CP详情"
       direction="rtl"
       size="600px"
     >
@@ -265,11 +265,11 @@
           </div>
         </div>
 
-        <!-- VIP详情 -->
+        <!-- CP详情 -->
         <div class="detail-section">
-          <h3>VIP详情</h3>
+          <h3>CP详情</h3>
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="VIP等级">
+            <el-descriptions-item label="CP等级">
               {{ getVipLevelName(currentVip.vip_level) }}
             </el-descriptions-item>
             <el-descriptions-item label="开通时间">
@@ -366,11 +366,11 @@ const pagination = reactive({
   total: 0
 })
 
-// VIP等级映射
+// CP等级映射
 const vipLevelMap = {
-  normal: '普通VIP',
-  premium: '高级VIP',
-  diamond: '钻石VIP'
+  normal: '普通CP',
+  premium: '高级CP',
+  diamond: '钻石CP'
 }
 
 // 状态映射
@@ -380,12 +380,12 @@ const statusMap = {
   suspended: '暂停'
 }
 
-// 获取VIP等级名称
+// 获取CP等级名称
 const getVipLevelName = (level) => {
   return vipLevelMap[level] || '未知'
 }
 
-// 获取VIP等级颜色
+// 获取CP等级颜色
 const getVipLevelColor = (level) => {
   const colorMap = {
     normal: 'warning',
@@ -495,7 +495,7 @@ const handleCurrentChange = (page) => {
   loadVipUsers()
 }
 
-// 查看VIP详情
+// 查看CP详情
 const viewVip = (vip) => {
   currentVip.value = vip
   vipDetailVisible.value = true

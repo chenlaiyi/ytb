@@ -266,7 +266,7 @@ const initUserTypeChart = () => {
       type: 'pie',
       radius: ['40%', '70%'],
       data: [
-        { value: props.data.vip_users || 0, name: 'VIP用户' },
+        { value: props.data.vip_users || 0, name: 'CP用户' },
         { value: props.data.regular_users || 0, name: '普通用户' }
       ],
       itemStyle: {

@@ -16,11 +16,11 @@
     </el-alert>
 
     <div class="config-content">
-      <!-- VIP招募分红 -->
+      <!-- CP招募分红 -->
       <el-card class="config-card">
         <template #header>
           <div class="card-header">
-            <span>VIP招募分红</span>
+            <span>CP招募分红</span>
             <el-switch v-model="config.vip_dividend_enabled" />
           </div>
         </template>

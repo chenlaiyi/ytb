@@ -3,8 +3,8 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-title">
-        <h2>VIP会员管理</h2>
-        <p class="page-description">管理和查看所有VIP会员信息</p>
+        <h2>CP会员管理</h2>
+        <p class="page-description">管理和查看所有CP会员信息</p>
       </div>
       <div class="page-actions">
         <el-button type="primary" size="large" @click="refreshData">
@@ -14,54 +14,54 @@
       </div>
     </div>
 
-    <!-- VIP会员模块导航标签页 -->
+    <!-- CP会员模块导航标签页 -->
     <el-card class="navigation-card" shadow="never">
       <el-tabs v-model="activeTab" @tab-click="handleTabClick" class="vip-tabs">
-        <el-tab-pane label="VIP会员列表" name="list">
+        <el-tab-pane label="CP会员列表" name="list">
           <template #label>
             <span class="tab-label">
               <el-icon><User /></el-icon>
-              VIP会员列表
+              CP会员列表
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP分红管理" name="dividends">
+        <el-tab-pane label="CP分红管理" name="dividends">
           <template #label>
             <span class="tab-label">
               <el-icon><Money /></el-icon>
-              VIP分红管理
+              CP分红管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP排行榜" name="rankings">
+        <el-tab-pane label="CP排行榜" name="rankings">
           <template #label>
             <span class="tab-label">
               <el-icon><Trophy /></el-icon>
-              VIP排行榜
+              CP排行榜
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP余额管理" name="balance">
+        <el-tab-pane label="CP余额管理" name="balance">
           <template #label>
             <span class="tab-label">
               <el-icon><Wallet /></el-icon>
-              VIP余额管理
+              CP余额管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP等级管理" name="levels">
+        <el-tab-pane label="CP等级管理" name="levels">
           <template #label>
             <span class="tab-label">
               <el-icon><Star /></el-icon>
-              VIP等级管理
+              CP等级管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP统计分析" name="statistics">
+        <el-tab-pane label="CP统计分析" name="statistics">
           <template #label>
             <span class="tab-label">
               <el-icon><DataAnalysis /></el-icon>
-              VIP统计分析
+              CP统计分析
             </span>
           </template>
         </el-tab-pane>
@@ -71,7 +71,7 @@
     <el-card class="box-card">
       <template #header>
         <div class="card-header">
-          <span>VIP会员列表</span>
+          <span>CP会员列表</span>
           <div class="header-actions">
             <el-button type="primary" @click="refreshData">
               <el-icon><Refresh /></el-icon>
@@ -89,7 +89,7 @@
               <template #header>
                 <div class="stats-header">
                   <el-icon class="stats-icon"><User /></el-icon>
-                  <span>VIP会员总数</span>
+                  <span>CP会员总数</span>
                 </div>
               </template>
               <div class="stats-value primary">{{ stats.total_vip || 0 }}人</div>
@@ -203,11 +203,11 @@
           <template #default="scope">
             <div class="team-stats">
               <div class="team-item">
-                <span class="team-label">直推VIP:</span>
+                <span class="team-label">直推CP:</span>
                 <span class="team-value primary">{{ scope.row.direct_vip_count }}</span>
               </div>
               <div class="team-item">
-                <span class="team-label">团队VIP:</span>
+                <span class="team-label">团队CP:</span>
                 <span class="team-value success">{{ scope.row.team_vip_count }}</span>
               </div>
             </div>
@@ -244,11 +244,11 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="VIP时间" width="200" align="center">
+        <el-table-column label="CP时间" width="200" align="center">
           <template #default="scope">
             <div class="vip-time-info">
               <div class="vip-time-item">
-                <span class="time-label">成为VIP:</span>
+                <span class="time-label">成为CP:</span>
                 <span class="time-value">{{ formatDate(scope.row.vip_at) }}</span>
               </div>
               <div class="vip-time-item">
@@ -448,7 +448,7 @@ const limit = ref(20);
 const searchQuery = ref('');
 const defaultAvatar = '/admin/images/default-avatar.png';
 
-// VIP会员模块导航标签页
+// CP会员模块导航标签页
 const activeTab = ref('list');
 
 // 统计数据
@@ -470,7 +470,7 @@ const saveImageLoading = ref(false);
 const teamStats = ref(null);
 const selectedTimeRange = ref('all');
 
-// 获取VIP会员列表
+// 获取CP会员列表
 async function getVipList() {
   loading.value = true;
   try {
@@ -494,11 +494,11 @@ async function getVipList() {
         Object.assign(stats, response.data.data.stats);
       }
     } else {
-      ElMessage.error(response.data.message || '获取VIP会员列表失败');
+      ElMessage.error(response.data.message || '获取CP会员列表失败');
     }
   } catch (error) {
-    console.error('获取VIP会员列表失败:', error);
-    ElMessage.error('获取VIP会员列表失败');
+    console.error('获取CP会员列表失败:', error);
+    ElMessage.error('获取CP会员列表失败');
   } finally {
     loading.value = false;
   }
@@ -562,7 +562,7 @@ const tableRowClassName = ({ row, rowIndex }) => {
 // 查看用户详情
 const viewDetail = (user) => {
   ElMessageBox.alert(
-    `用户ID: ${user.id}\n昵称: ${user.nickname || user.name || '未设置'}\n手机号: ${user.mobile || user.phone || '未绑定'}\n余额: ${formatCurrency(user.balance)}元\n直推VIP: ${user.direct_vip_count}人\n团队VIP: ${user.team_vip_count}人\n成为VIP时间: ${formatDate(user.vip_at)}\nVIP完款时间: ${formatDate(user.vip_paid_at)}`,
+    `用户ID: ${user.id}\n昵称: ${user.nickname || user.name || '未设置'}\n手机号: ${user.mobile || user.phone || '未绑定'}\n余额: ${formatCurrency(user.balance)}元\n直推CP: ${user.direct_vip_count}人\n团队CP: ${user.team_vip_count}人\n成为CP时间: ${formatDate(user.vip_at)}\nCP完款时间: ${formatDate(user.vip_paid_at)}`,
     '用户详情',
     {
       confirmButtonText: '确定',
@@ -831,7 +831,7 @@ const saveAsImage = async () => {
     // 创建下载文件名
     const userName = currentUser.value?.nickname || currentUser.value?.name || '团队长';
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-    const fileName = `VIP团队关系树_${userName}_${timestamp}.png`;
+    const fileName = `CP团队关系树_${userName}_${timestamp}.png`;
     
     console.log('📁 准备下载文件:', fileName);
     
@@ -885,7 +885,7 @@ const saveAsImage = async () => {
   }
 };
 
-// 处理VIP会员模块导航标签页点击
+// 处理CP会员模块导航标签页点击
 const handleTabClick = (tab) => {
   const tabName = tab.props.name;
   
@@ -917,7 +917,7 @@ const handleTabClick = (tab) => {
 // 查看团队信息（保留原有功能）
 const viewTeam = (user) => {
   ElMessageBox.alert(
-    `团队统计信息:\n\n直推VIP数量: ${user.direct_vip_count}人\n团队VIP数量: ${user.team_vip_count}人\n\n本月新增:\n- 直推VIP: ${user.month_direct_vip}人\n- 团队VIP: ${user.month_team_vip}人\n\n上月新增:\n- 直推VIP: ${user.last_month_direct_vip}人\n- 团队VIP: ${user.last_month_team_vip}人`,
+    `团队统计信息:\n\n直推CP数量: ${user.direct_vip_count}人\n团队CP数量: ${user.team_vip_count}人\n\n本月新增:\n- 直推CP: ${user.month_direct_vip}人\n- 团队CP: ${user.month_team_vip}人\n\n上月新增:\n- 直推CP: ${user.last_month_direct_vip}人\n- 团队CP: ${user.last_month_team_vip}人`,
     `${user.nickname || user.name}的团队信息`,
     {
       confirmButtonText: '确定',
@@ -1147,7 +1147,7 @@ const handleNodeClick = (node) => {
   text-rendering: optimizeLegibility !important;
 }
 
-/* VIP会员模块导航标签页 */
+/* CP会员模块导航标签页 */
 .navigation-card {
   margin-bottom: 20px;
   border-radius: 12px;

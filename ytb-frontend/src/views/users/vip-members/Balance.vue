@@ -3,8 +3,8 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-title">
-        <h2>VIP会员管理</h2>
-        <p class="page-description">管理和查看所有VIP会员信息</p>
+        <h2>CP会员管理</h2>
+        <p class="page-description">管理和查看所有CP会员信息</p>
       </div>
       <div class="page-actions">
         <el-button type="primary" size="large" @click="showAdjustDialog">
@@ -18,54 +18,54 @@
       </div>
     </div>
 
-    <!-- VIP会员模块导航标签页 -->
+    <!-- CP会员模块导航标签页 -->
     <el-card class="navigation-card" shadow="never">
       <el-tabs v-model="activeTab" @tab-click="handleTabClick" class="vip-tabs">
-        <el-tab-pane label="VIP会员列表" name="list">
+        <el-tab-pane label="CP会员列表" name="list">
           <template #label>
             <span class="tab-label">
               <el-icon><User /></el-icon>
-              VIP会员列表
+              CP会员列表
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP分红管理" name="dividends">
+        <el-tab-pane label="CP分红管理" name="dividends">
           <template #label>
             <span class="tab-label">
               <el-icon><Money /></el-icon>
-              VIP分红管理
+              CP分红管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP排行榜" name="rankings">
+        <el-tab-pane label="CP排行榜" name="rankings">
           <template #label>
             <span class="tab-label">
               <el-icon><Trophy /></el-icon>
-              VIP排行榜
+              CP排行榜
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP余额管理" name="balance">
+        <el-tab-pane label="CP余额管理" name="balance">
           <template #label>
             <span class="tab-label">
               <el-icon><Wallet /></el-icon>
-              VIP余额管理
+              CP余额管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP等级管理" name="levels">
+        <el-tab-pane label="CP等级管理" name="levels">
           <template #label>
             <span class="tab-label">
               <el-icon><Star /></el-icon>
-              VIP等级管理
+              CP等级管理
             </span>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="VIP统计分析" name="statistics">
+        <el-tab-pane label="CP统计分析" name="statistics">
           <template #label>
             <span class="tab-label">
               <el-icon><DataAnalysis /></el-icon>
-              VIP统计分析
+              CP统计分析
             </span>
           </template>
         </el-tab-pane>
@@ -96,7 +96,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-value">{{ stats.totalVipUsers }}</div>
-                <div class="stat-label">VIP用户数</div>
+                <div class="stat-label">CP用户数</div>
               </div>
             </div>
           </el-card>
@@ -174,8 +174,8 @@
     <el-card class="table-card" shadow="hover">
       <template #header>
         <div class="card-header">
-          <h3>VIP会员余额列表</h3>
-          <span class="total-count">共 {{ total }} 名VIP会员</span>
+          <h3>CP会员余额列表</h3>
+          <span class="total-count">共 {{ total }} 名CP会员</span>
         </div>
       </template>
       
@@ -185,7 +185,7 @@
         stripe
         style="width: 100%"
       >
-        <el-table-column label="VIP会员" min-width="200" fixed="left">
+        <el-table-column label="CP会员" min-width="200" fixed="left">
           <template #default="{ row }">
             <div class="user-cell">
               <el-avatar :size="40" :src="row.wechat_avatar">
@@ -210,19 +210,19 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="团队VIP" width="100" align="center">
+        <el-table-column label="团队CP" width="100" align="center">
           <template #default="{ row }">
             <el-tag type="success" size="small">{{ row.team_vip_count }}</el-tag>
           </template>
         </el-table-column>
         
-        <el-table-column label="直推VIP" width="100" align="center">
+        <el-table-column label="直推CP" width="100" align="center">
           <template #default="{ row }">
             <el-tag type="primary" size="small">{{ row.direct_vip_count }}</el-tag>
           </template>
         </el-table-column>
         
-        <el-table-column label="VIP完款时间" width="150" align="center">
+        <el-table-column label="CP完款时间" width="150" align="center">
           <template #default="{ row }">
             <span class="date-text">{{ formatDate(row.vip_at) }}</span>
           </template>
@@ -426,7 +426,7 @@ const stats = reactive({
   todayChanges: '0.00'
 })
 
-// VIP会员模块导航标签页
+// CP会员模块导航标签页
 const activeTab = ref('balance')
 
 // 搜索表单
@@ -593,7 +593,7 @@ const refreshData = () => {
   loadBalanceList()
 }
 
-// 处理VIP会员模块导航标签页点击
+// 处理CP会员模块导航标签页点击
 const handleTabClick = (tab) => {
   const tabName = tab.props.name;
   
@@ -770,7 +770,7 @@ onMounted(() => {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
-/* VIP会员模块导航标签页 */
+/* CP会员模块导航标签页 */
 .navigation-card {
   margin-bottom: 20px;
   border-radius: 12px;
