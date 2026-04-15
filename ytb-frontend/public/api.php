@@ -1663,6 +1663,52 @@ try {
         exit;
     }
 
+    // 微信JSSDK配置 (GET /Tapp/admin/api/wechat/jsconfig.php) - 亿拓宝专用
+    if (preg_match('#^Tapp/admin/api/wechat/jsconfig\.php$#', $path) && $method === 'GET') {
+        $url = $_GET['url'] ?? '';
+        if (empty($url)) {
+            echo json_encode(['code' => 1, 'message' => 'URL参数缺失']);
+            exit;
+        }
+
+        // 亿拓宝微信公众号配置
+        $appId = 'wx644418e60bf1f7a2';  // 亿拓宝服务号
+
+        // 获取JSAPI Ticket
+        $tappDb = getTappDB();
+        $ticket = getWechatJsapiTicket($tappDb, $appId);
+        if (!$ticket) {
+            echo json_encode(['code' => 1, 'message' => '获取JSAPI Ticket失败']);
+            exit;
+        }
+
+        $timestamp = time();
+        $nonceStr = bin2hex(random_bytes(8));
+
+        // 生成签名
+        $signature = generateWechatSignature($url, $timestamp, $nonceStr, $ticket);
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取微信JSSDK配置成功',
+            'data' => [
+                'appId' => $appId,
+                'timestamp' => $timestamp,
+                'nonceStr' => $nonceStr,
+                'signature' => $signature,
+                'jsApiList' => [
+                    'updateAppMessageShareData',
+                    'updateTimelineShareData',
+                    'onMenuShareTimeline',
+                    'onMenuShareAppMessage',
+                    'chooseWXPay',
+                    'getBrandWCPayRequest'
+                ]
+            ]
+        ]);
+        exit;
+    }
+
     // 404
     http_response_code(404);
     echo json_encode(['code' => 404, 'message' => '接口不存在']);
@@ -1670,6 +1716,71 @@ try {
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode(['code' => 500, 'message' => '服务器错误: ' . $e->getMessage()]);
+}
+
+// ==================== 微信JSSDK辅助函数 ====================
+
+/**
+ * 获取微信JSAPI Ticket
+ */
+function getWechatJsapiTicket($db, $appId) {
+    try {
+        // 获取authorizer_access_token
+        $stmt = $db->prepare("SELECT authorizer_access_token, authorizer_access_token_expires_at FROM wechat_authorized_accounts WHERE authorizer_appid = ? AND status = 'active' LIMIT 1");
+        $stmt->execute([$appId]);
+        $account = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$account || empty($account['authorizer_access_token'])) {
+            return null;
+        }
+
+        $accessToken = $account['authorizer_access_token'];
+
+        // 先检查数据库中是否有有效的jsapi_ticket
+        $stmt = $db->prepare("SELECT ticket_value, expires_at FROM wechat_jsapi_tickets WHERE appid = ? ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$appId]);
+        $ticketRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($ticketRow && $ticketRow['expires_at'] > time()) {
+            return $ticketRow['ticket_value'];
+        }
+
+        // 需要刷新jsapi_ticket
+        $jsapiUrl = "https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token={$accessToken}&type=jsapi";
+        $context = stream_context_create([
+            'http' => ['timeout' => 10, 'ignore_errors' => true]
+        ]);
+        $response = @file_get_contents($jsapiUrl, false, $context);
+
+        if (!$response) {
+            return null;
+        }
+
+        $result = json_decode($response, true);
+        if (!isset($result['errcode']) || $result['errcode'] != 0) {
+            return null;
+        }
+
+        $ticket = $result['ticket'];
+        $expiresIn = intval($result['expires_in']);
+
+        // 保存到数据库
+        $stmt = $db->prepare("INSERT INTO wechat_jsapi_tickets (appid, ticket_value, expires_at, created_at) VALUES (?, ?, ?, NOW())");
+        $stmt->execute([$appId, $ticket, time() + $expiresIn - 200]);
+
+        return $ticket;
+
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+/**
+ * 生成微信签名
+ */
+function generateWechatSignature($url, $timestamp, $nonceStr, $ticket) {
+    $str = "jsapi_ticket={$ticket}&noncestr={$nonceStr}&timestamp={$timestamp}&url={$url}";
+    return sha1($str);
 }
 
 function buildMenuTree($menus, $parentId = 0) {

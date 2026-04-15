@@ -27,9 +27,15 @@ scp $SOURCE_DIR/dist/index.html $SERVER:$YTB_ROOT/index.html
 ssh $SERVER "mkdir -p $YTB_ROOT/assets"
 rsync -avz --delete $SOURCE_DIR/dist/assets/ $SERVER:$YTB_ROOT/assets/
 
-# 部署 public 资源 (images等)
-ssh $SERVER "mkdir -p $YTB_ROOT/images"
+# 部署 public 资源 (images, js, css等)
+ssh $SERVER "mkdir -p $YTB_ROOT/images $YTB_ROOT/js $YTB_ROOT/css"
 rsync -avz --delete $SOURCE_DIR/public/images/ $SERVER:$YTB_ROOT/images/
+rsync -avz --delete $SOURCE_DIR/public/js/ $SERVER:$YTB_ROOT/js/
+rsync -avz --delete $SOURCE_DIR/public/css/ $SERVER:$YTB_ROOT/css/
+
+# 部署 dist 中的 js 和 css (如 jquery.min.js stub)
+rsync -avz --delete $SOURCE_DIR/dist/js/ $SERVER:$YTB_ROOT/js/
+rsync -avz --delete $SOURCE_DIR/dist/css/ $SERVER:$YTB_ROOT/css/
 
 echo ""
 echo "===== H5 部署完成 ====="
