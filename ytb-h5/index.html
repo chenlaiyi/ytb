@@ -128,6 +128,114 @@
         if (typeof g.TextEncoder === 'undefined' && typeof window !== 'undefined' && window.TextEncoder) {
           g.TextEncoder = window.TextEncoder;
         }
+
+        // 强制创建 Request 构造器（如果不存在）
+        if (typeof g.Request === 'undefined') {
+          g.Request = function Request(input, init) {
+            this.url = typeof input === 'string' ? input : (input && input.url) || '';
+            this.method = (init && init.method) || (input && input.method) || 'GET';
+            this.headers = (init && init.headers) || (input && input.headers) || {};
+            this.body = (init && init.body) || (input && input.body) || null;
+            this.credentials = (init && init.credentials) || (input && input.credentials) || 'same-origin';
+          };
+          g.Request.prototype = {};
+        }
+
+        // 强制创建 Response 构造器
+        if (typeof g.Response === 'undefined') {
+          g.Response = function Response(body, init) {
+            this.body = body;
+            this.status = (init && init.status) || 200;
+            this.statusText = (init && init.statusText) || 'OK';
+            this.ok = this.status >= 200 && this.status < 300;
+            this.headers = new g.Headers ? new g.Headers(init && init.headers) : {};
+            this.url = (init && init.url) || '';
+          };
+          g.Response.prototype = {};
+        }
+
+        // 强制创建 Headers 构造器
+        if (typeof g.Headers === 'undefined') {
+          g.Headers = function Headers(init) {
+            this._map = {};
+            if (init) {
+              if (init instanceof g.Headers || typeof init === 'object') {
+                var entries = init instanceof g.Headers ? Array.from(init.entries()) : Object.entries(init);
+                entries.forEach(function(entry) {
+                  this._map[entry[0].toLowerCase()] = entry[1];
+                }, this);
+              }
+            }
+          };
+          g.Headers.prototype.entries = function* entries() {
+            var map = this._map;
+            for (var key in map) {
+              if (Object.prototype.hasOwnProperty.call(map, key)) {
+                yield [key, map[key]];
+              }
+            }
+          };
+          g.Headers.prototype.forEach = function forEach(callback, thisArg) {
+            var map = this._map;
+            for (var key in map) {
+              if (Object.prototype.hasOwnProperty.call(map, key)) {
+                callback.call(thisArg, map[key], key, this);
+              }
+            }
+          };
+          g.Headers.prototype.get = function get(key) {
+            return this._map[key.toLowerCase()] || null;
+          };
+          g.Headers.prototype.has = function has(key) {
+            return key.toLowerCase() in this._map;
+          };
+        }
+
+        // 强制创建 fetch 函数（使用 XHR 模拟）
+        if (typeof g.fetch === 'undefined') {
+          g.fetch = function fetch(input, init) {
+            return new Promise(function(resolve, reject) {
+              var url = typeof input === 'string' ? input : (input && input.url) || '';
+              var method = (init && init.method) || (input && input.method) || 'GET';
+
+              var xhr = new XMLHttpRequest();
+              xhr.open(method, url, true);
+
+              if (init && init.headers) {
+                if (init.headers instanceof g.Headers) {
+                  init.headers.forEach(function(value, key) {
+                    xhr.setRequestHeader(key, value);
+                  });
+                } else if (typeof init.headers === 'object') {
+                  Object.keys(init.headers).forEach(function(key) {
+                    xhr.setRequestHeader(key, init.headers[key]);
+                  });
+                }
+              }
+
+              xhr.withCredentials = init && init.credentials === 'include';
+
+              xhr.onload = function() {
+                var response = new g.Response(xhr.responseText, {
+                  status: xhr.status,
+                  statusText: xhr.statusText,
+                  headers: {}
+                });
+                resolve(response);
+              };
+
+              xhr.onerror = function() {
+                reject(new TypeError('Network request failed'));
+              };
+
+              xhr.ontimeout = function() {
+                reject(new TypeError('Network request timed out'));
+              };
+
+              xhr.send(init && init.body || null);
+            });
+          };
+        }
       })();
     </script>
     <!-- 兜底 globalThis/global 以兼容旧版微信 WebView -->
