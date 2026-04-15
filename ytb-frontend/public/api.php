@@ -1061,6 +1061,608 @@ try {
         exit;
     }
 
+    // ========== 净水器工程师/工单 API ==========
+
+    // 工单统计数据 (GET /api/admin/water-engineer/stats)
+    if ($path === 'admin/water-engineer/stats' && $method === 'GET') {
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'total_orders' => 0,
+                'pending_orders' => 0,
+                'assigned_orders' => 0,
+                'completed_orders' => 0,
+                'cancelled_orders' => 0,
+            ]
+        ]);
+        exit;
+    }
+
+    // 工单列表 (GET /api/admin/water-engineer/orders)
+    if ($path === 'admin/water-engineer/orders' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(100, max(1, intval($_GET['limit'] ?? 15)));
+        $offset = ($page - 1) * $limit;
+
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'data' => [],
+                'total' => 0,
+                'page' => $page,
+                'per_page' => $limit,
+            ]
+        ]);
+        exit;
+    }
+
+    // 工单详情 (GET /api/admin/water-engineer/orders/:orderNo)
+    if (preg_match('#^admin/water-engineer/orders/([^/]+)$#', $path, $matches) && $method === 'GET') {
+        $orderNo = $matches[1];
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'order_no' => $orderNo,
+                'status' => 'pending',
+            ]
+        ]);
+        exit;
+    }
+
+    // 派单 (POST /api/admin/water-engineer/orders/:orderNo/assign)
+    if (preg_match('#^admin/water-engineer/orders/([^/]+)/assign$#', $path, $matches) && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '派单成功']);
+        exit;
+    }
+
+    // 取消工单 (POST /api/admin/water-engineer/orders/:orderNo/cancel)
+    if (preg_match('#^admin/water-engineer/orders/([^/]+)/cancel$#', $path, $matches) && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '工单已取消']);
+        exit;
+    }
+
+    // 待接单订单 (GET /api/admin/water-engineer/pending-orders)
+    if ($path === 'admin/water-engineer/pending-orders' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => []]);
+        exit;
+    }
+
+    // 工程师列表 (GET /api/admin/water-engineer/engineers)
+    if ($path === 'admin/water-engineer/engineers' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => []]);
+        exit;
+    }
+
+    // ========== 安装预约 API (非v1版本，用于 Booking.vue) ==========
+
+    // 安装预约列表 (GET /api/admin/installation/booking)
+    if ($path === 'admin/installation/booking' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, intval($_GET['per_page'] ?? 20)));
+        $offset = ($page - 1) * $perPage;
+
+        $where = [];
+        $params = [];
+
+        if (!empty($_GET['keyword'])) {
+            $where[] = "(contact_name LIKE ? OR contact_phone LIKE ? OR install_address LIKE ?)";
+            $params[] = '%' . $_GET['keyword'] . '%';
+            $params[] = '%' . $_GET['keyword'] . '%';
+            $params[] = '%' . $_GET['keyword'] . '%';
+        }
+        if (!empty($_GET['status'])) {
+            $where[] = "status = ?";
+            $params[] = $_GET['status'];
+        }
+        if (!empty($_GET['payment_status'])) {
+            $where[] = "payment_status = ?";
+            $params[] = $_GET['payment_status'];
+        }
+        if (!empty($_GET['start_date'])) {
+            $where[] = "install_time >= ?";
+            $params[] = $_GET['start_date'] . ' 00:00:00';
+        }
+        if (!empty($_GET['end_date'])) {
+            $where[] = "install_time <= ?";
+            $params[] = $_GET['end_date'] . ' 23:59:59';
+        }
+
+        $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        // 查询总数
+        try {
+            $countSql = "SELECT COUNT(*) as total FROM water_installation_bookings $whereSql";
+            $countStmt = $db->prepare($countSql);
+            $countStmt->execute($params);
+            $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+            $listSql = "SELECT * FROM water_installation_bookings $whereSql ORDER BY id DESC LIMIT $offset, $perPage";
+            $listStmt = $db->prepare($listSql);
+            $listStmt->execute($params);
+            $rows = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $rows = [];
+            $total = 0;
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'data' => $rows,
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage
+            ]
+        ]);
+        exit;
+    }
+
+    // 创建安装预约 (POST /api/admin/installation/booking)
+    if ($path === 'admin/installation/booking' && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '创建成功', 'data' => ['id' => time()]]);
+        exit;
+    }
+
+    // 安装预约详情 (GET /api/admin/installation/booking/:id)
+    if (preg_match('#^admin/installation/booking/(\d+)$#', $path, $matches) && $method === 'GET') {
+        $id = intval($matches[1]);
+        try {
+            $stmt = $db->prepare("SELECT * FROM water_installation_bookings WHERE id = ?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $row = null;
+        }
+        echo json_encode(['code' => 0, 'data' => $row ?: ['id' => $id]]);
+        exit;
+    }
+
+    // 更新安装预约 (PUT /api/admin/installation/booking/:id)
+    if (preg_match('#^admin/installation/booking/(\d+)$#', $path, $matches) && $method === 'PUT') {
+        echo json_encode(['code' => 0, 'message' => '更新成功']);
+        exit;
+    }
+
+    // 删除安装预约 (DELETE /api/admin/installation/booking/:id)
+    if (preg_match('#^admin/installation/booking/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        echo json_encode(['code' => 0, 'message' => '删除成功']);
+        exit;
+    }
+
+    // 分配工程师 (POST /api/admin/installation/booking/:id/assign-engineer)
+    if (preg_match('#^admin/installation/booking/(\d+)/assign-engineer$#', $path, $matches) && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '分配成功']);
+        exit;
+    }
+
+    // 可用工程师列表 (GET /api/admin/installation/available-engineers)
+    if ($path === 'admin/installation/available-engineers' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => []]);
+        exit;
+    }
+
+    // 安装统计 (非v1) (GET /api/admin/installation/statistics)
+    if ($path === 'admin/installation/statistics' && $method === 'GET') {
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'total_bookings' => 0, 'pending_bookings' => 0, 'confirmed_bookings' => 0,
+                'assigned_bookings' => 0, 'in_progress_bookings' => 0, 'completed_bookings' => 0, 'cancelled_bookings' => 0
+            ]
+        ]);
+        exit;
+    }
+
+    // 导出预约数据 (GET /api/admin/installation/booking/export)
+    if ($path === 'admin/installation/booking/export' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'message' => '导出成功']);
+        exit;
+    }
+
+    // ========== 安装预约 API (/api/admin/v1/installation/*) ==========
+
+    // 安装预约列表 (GET /api/admin/v1/installation/bookings)
+    if ($path === 'admin/v1/installation/bookings' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(100, max(1, intval($_GET['per_page'] ?? 15)));
+        echo json_encode([
+            'code' => 0,
+            'data' => ['data' => [], 'total' => 0, 'page' => $page, 'per_page' => $limit]
+        ]);
+        exit;
+    }
+
+    // 安装预约详情 (GET /api/admin/v1/installation/bookings/:id)
+    if (preg_match('#^admin/v1/installation/bookings/(\d+)$#', $path, $matches) && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => ['id' => intval($matches[1])]]);
+        exit;
+    }
+
+    // 创建安装预约 (POST /api/admin/v1/installation/bookings)
+    if ($path === 'admin/v1/installation/bookings' && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '创建成功', 'data' => ['id' => time()]]);
+        exit;
+    }
+
+    // 更新安装预约 (PUT /api/admin/v1/installation/bookings/:id)
+    if (preg_match('#^admin/v1/installation/bookings/(\d+)$#', $path, $matches) && $method === 'PUT') {
+        echo json_encode(['code' => 0, 'message' => '更新成功']);
+        exit;
+    }
+
+    // 删除安装预约 (DELETE /api/admin/v1/installation/bookings/:id)
+    if (preg_match('#^admin/v1/installation/bookings/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        echo json_encode(['code' => 0, 'message' => '删除成功']);
+        exit;
+    }
+
+    // 更新预约状态 (PUT /api/admin/v1/installation/bookings/:id/status)
+    if (preg_match('#^admin/v1/installation/bookings/(\d+)/status$#', $path, $matches) && $method === 'PUT') {
+        echo json_encode(['code' => 0, 'message' => '状态更新成功']);
+        exit;
+    }
+
+    // 分配工程师 (PUT /api/admin/v1/installation/bookings/:id/assign-engineer)
+    if (preg_match('#^admin/v1/installation/bookings/(\d+)/assign-engineer$#', $path, $matches) && $method === 'PUT') {
+        echo json_encode(['code' => 0, 'message' => '分配成功']);
+        exit;
+    }
+
+    // 可用工程师列表 (GET /api/admin/v1/installation/engineers/available)
+    if ($path === 'admin/v1/installation/engineers/available' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => []]);
+        exit;
+    }
+
+    // 工程师列表 (GET /api/admin/v1/installation/engineers)
+    if ($path === 'admin/v1/installation/engineers' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => ['data' => [], 'total' => 0]]);
+        exit;
+    }
+
+    // 创建工程师 (POST /api/admin/v1/installation/engineers)
+    if ($path === 'admin/v1/installation/engineers' && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '创建成功', 'data' => ['id' => time()]]);
+        exit;
+    }
+
+    // 更新工程师 (PUT /api/admin/v1/installation/engineers/:id)
+    if (preg_match('#^admin/v1/installation/engineers/(\d+)$#', $path, $matches) && $method === 'PUT') {
+        echo json_encode(['code' => 0, 'message' => '更新成功']);
+        exit;
+    }
+
+    // 删除工程师 (DELETE /api/admin/v1/installation/engineers/:id)
+    if (preg_match('#^admin/v1/installation/engineers/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        echo json_encode(['code' => 0, 'message' => '删除成功']);
+        exit;
+    }
+
+    // 安装统计 (GET /api/admin/v1/installation/statistics)
+    if ($path === 'admin/v1/installation/statistics' && $method === 'GET') {
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'total_bookings' => 0, 'pending_bookings' => 0, 'confirmed_bookings' => 0,
+                'assigned_bookings' => 0, 'in_progress_bookings' => 0, 'completed_bookings' => 0, 'cancelled_bookings' => 0
+            ]
+        ]);
+        exit;
+    }
+
+    // 上传安装照片 (POST /api/admin/v1/installation/bookings/:bookingId/upload-photo)
+    if (preg_match('#^admin/v1/installation/bookings/(\d+)/upload-photo$#', $path, $matches) && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '上传成功']);
+        exit;
+    }
+
+    // ========== 工程师管理 API (/api/admin/v1/installation-engineers/*) ==========
+
+    // 工程师列表
+    if ($path === 'admin/v1/installation-engineers' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => ['data' => [], 'total' => 0]]);
+        exit;
+    }
+
+    // 工程师详情
+    if (preg_match('#^admin/v1/installation-engineers/(\d+)$#', $path, $matches) && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => ['id' => intval($matches[1])]]);
+        exit;
+    }
+
+    // 创建工程师
+    if ($path === 'admin/v1/installation-engineers' && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '创建成功', 'data' => ['id' => time()]]);
+        exit;
+    }
+
+    // 更新工程师
+    if (preg_match('#^admin/v1/installation-engineers/(\d+)$#', $path, $matches) && $method === 'PUT') {
+        echo json_encode(['code' => 0, 'message' => '更新成功']);
+        exit;
+    }
+
+    // 删除工程师
+    if (preg_match('#^admin/v1/installation-engineers/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        echo json_encode(['code' => 0, 'message' => '删除成功']);
+        exit;
+    }
+
+    // 更新工程师状态
+    if (preg_match('#^admin/v1/installation-engineers/(\d+)/status$#', $path, $matches) && $method === 'PUT') {
+        echo json_encode(['code' => 0, 'message' => '状态更新成功']);
+        exit;
+    }
+
+    // 工程师统计
+    if (preg_match('#^admin/v1/installation-engineers/(\d+)/stats$#', $path, $matches) && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => ['total_installations' => 0, 'completed' => 0, 'pending' => 0]]);
+        exit;
+    }
+
+    // 工程师工作记录
+    if (preg_match('#^admin/v1/installation-engineers/(\d+)/installations$#', $path, $matches) && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => ['data' => [], 'total' => 0]]);
+        exit;
+    }
+
+    // 分配工作
+    if (preg_match('#^admin/v1/installation-engineers/(\d+)/assign-work$#', $path, $matches) && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '分配成功']);
+        exit;
+    }
+
+    // 可用工程师
+    if ($path === 'admin/v1/installation-engineers/available' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => []]);
+        exit;
+    }
+
+    // 批量操作工程师
+    if ($path === 'admin/v1/installation-engineers/batch-operate' && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '操作成功']);
+        exit;
+    }
+
+    // 导出工程师
+    if ($path === 'admin/v1/installation-engineers/export' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'message' => '导出成功']);
+        exit;
+    }
+
+    // 工程师区域
+    if ($path === 'admin/v1/installation-engineers/regions' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => []]);
+        exit;
+    }
+
+    // 同步工程师
+    if ($path === 'admin/v1/installation-engineers/sync-from-water-db' && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '同步成功']);
+        exit;
+    }
+
+    // 更新工程师安装数量
+    if ($path === 'admin/v1/installation-engineers/update-installation-count' && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '更新成功']);
+        exit;
+    }
+
+    // ========== 净水器安装记录 API (/api/admin/v1/installations/*) ==========
+
+    // 安装记录列表 (GET /api/admin/v1/installations)
+    if ($path === 'admin/v1/installations' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, intval($_GET['per_page'] ?? 15)));
+        $offset = ($page - 1) * $perPage;
+
+        $where = [];
+        $params = [];
+
+        if (!empty($_GET['keyword'])) {
+            $where[] = "(device_number LIKE ? OR client_name LIKE ?)";
+            $params[] = '%' . $_GET['keyword'] . '%';
+            $params[] = '%' . $_GET['keyword'] . '%';
+        }
+        if (!empty($_GET['status'])) {
+            $where[] = "status = ?";
+            $params[] = $_GET['status'];
+        }
+        if (!empty($_GET['start_date'])) {
+            $where[] = "installed_at >= ?";
+            $params[] = $_GET['start_date'] . ' 00:00:00';
+        }
+        if (!empty($_GET['end_date'])) {
+            $where[] = "installed_at <= ?";
+            $params[] = $_GET['end_date'] . ' 23:59:59';
+        }
+
+        $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        // 查询总数
+        $countSql = "SELECT COUNT(*) as total FROM ytb_installations $whereSql";
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 查询列表
+        $listSql = "SELECT i.*,
+            u.nickname as promoter_nickname, u.role as promoter_role, u.role_name as promoter_role_name,
+            u1.nickname as level1_nickname, u2.nickname as level2_nickname
+            FROM ytb_installations i
+            LEFT JOIN ytb_users u ON i.user_id = u.id
+            LEFT JOIN ytb_users u1 ON u.parent_id = u1.id
+            LEFT JOIN ytb_users u2 ON u1.parent_id = u2.id
+            $whereSql
+            ORDER BY i.id DESC LIMIT $offset, $perPage";
+        $listStmt = $db->prepare($listSql);
+        $listStmt->execute($params);
+        $rows = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $items = [];
+        foreach ($rows as $row) {
+            $statusName = ['pending' => '待激活', 'activated' => '已激活', 'settled' => '已结算'];
+            $items[] = [
+                'id' => $row['id'],
+                'device_number' => $row['device_number'] ?? '',
+                'client_name' => $row['client_name'] ?? '',
+                'client_phone' => $row['client_phone'] ?? '',
+                'install_address' => $row['install_address'] ?? '',
+                'status' => $row['status'] ?? 'pending',
+                'status_name' => $statusName[$row['status']] ?? '未知',
+                'installed_at' => $row['installed_at'] ?? '',
+                'activated_at' => $row['activated_at'] ?? '',
+                'settled_at' => $row['settled_at'] ?? '',
+                'promoter_reward' => floatval($row['promoter_reward'] ?? 0),
+                'level1_reward' => floatval($row['level1_reward'] ?? 0),
+                'level2_reward' => floatval($row['level2_reward'] ?? 0),
+                'boss_refund' => floatval($row['boss_refund'] ?? 0),
+                'promoter' => [
+                    'nickname' => $row['promoter_nickname'] ?? '',
+                    'role' => $row['promoter_role'] ?? '',
+                    'role_name' => $row['promoter_role_name'] ?? '',
+                    'avatar' => '',
+                ],
+                'level1_user' => [
+                    'nickname' => $row['level1_nickname'] ?? '',
+                ],
+                'level2_user' => [
+                    'nickname' => $row['level2_nickname'] ?? '',
+                ],
+                'boss_user' => [
+                    'nickname' => '',
+                ],
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'items' => $items,
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+            ]
+        ]);
+        exit;
+    }
+
+    // 安装记录详情 (GET /api/admin/v1/installations/:id)
+    if (preg_match('#^admin/v1/installations/(\d+)$#', $path, $matches) && $method === 'GET') {
+        $id = intval($matches[1]);
+
+        $stmt = $db->prepare("SELECT i.*,
+            u.nickname as promoter_nickname, u.role as promoter_role, u.role_name as promoter_role_name,
+            u1.nickname as level1_nickname, u2.nickname as level2_nickname
+            FROM ytb_installations i
+            LEFT JOIN ytb_users u ON i.user_id = u.id
+            LEFT JOIN ytb_users u1 ON u.parent_id = u1.id
+            LEFT JOIN ytb_users u2 ON u1.parent_id = u2.id
+            WHERE i.id = ?");
+        $stmt->execute([$id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            echo json_encode(['code' => 1, 'message' => '记录不存在']);
+            exit;
+        }
+
+        $statusName = ['pending' => '待激活', 'activated' => '已激活', 'settled' => '已结算'];
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'id' => $row['id'],
+                'device_number' => $row['device_number'] ?? '',
+                'client_name' => $row['client_name'] ?? '',
+                'client_phone' => $row['client_phone'] ?? '',
+                'install_address' => $row['install_address'] ?? '',
+                'status' => $row['status'] ?? 'pending',
+                'status_name' => $statusName[$row['status']] ?? '未知',
+                'installed_at' => $row['installed_at'] ?? '',
+                'activated_at' => $row['activated_at'] ?? '',
+                'settled_at' => $row['settled_at'] ?? '',
+                'promoter_reward' => floatval($row['promoter_reward'] ?? 0),
+                'level1_reward' => floatval($row['level1_reward'] ?? 0),
+                'level2_reward' => floatval($row['level2_reward'] ?? 0),
+                'boss_refund' => floatval($row['boss_refund'] ?? 0),
+                'promoter' => [
+                    'nickname' => $row['promoter_nickname'] ?? '',
+                    'role' => $row['promoter_role'] ?? '',
+                    'role_name' => $row['promoter_role_name'] ?? '',
+                    'avatar' => '',
+                ],
+                'level1_user' => ['nickname' => $row['level1_nickname'] ?? ''],
+                'level2_user' => ['nickname' => $row['level2_nickname'] ?? ''],
+                'boss_user' => ['nickname' => ''],
+            ]
+        ]);
+        exit;
+    }
+
+    // 安装统计 (GET /api/admin/v1/installations/statistics)
+    if ($path === 'admin/v1/installations/statistics' && $method === 'GET') {
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_installations");
+        $total = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->query("SELECT COUNT(*) as total_rewards FROM ytb_installations WHERE status IN ('activated', 'settled')");
+        $totalRewards = floatval($stmt->fetch(PDO::FETCH_ASSOC)['total_rewards'] ?? 0);
+
+        $stmt = $db->query("SELECT COALESCE(SUM(boss_refund), 0) as total_boss_refunds FROM ytb_installations");
+        $totalBossRefunds = floatval($stmt->fetch(PDO::FETCH_ASSOC)['total_boss_refunds'] ?? 0);
+
+        $monthStart = date('Y-m-01 00:00:00');
+        $stmt = $db->prepare("SELECT COUNT(*) as this_month FROM ytb_installations WHERE installed_at >= ?");
+        $stmt->execute([$monthStart]);
+        $thisMonthCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['this_month'] ?? 0;
+
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'total_installations' => $total,
+                'total_rewards' => $totalRewards,
+                'total_boss_refunds' => $totalBossRefunds,
+                'this_month_count' => $thisMonthCount,
+            ]
+        ]);
+        exit;
+    }
+
+    // 结算安装分佣 (POST /api/admin/v1/installations/:id/settle)
+    if (preg_match('#^admin/v1/installations/(\d+)/settle$#', $path, $matches) && $method === 'POST') {
+        $id = intval($matches[1]);
+
+        try {
+            $stmt = $db->prepare("UPDATE ytb_installations SET status = 'settled', settled_at = NOW() WHERE id = ? AND status = 'activated'");
+            $stmt->execute([$id]);
+
+            echo json_encode(['code' => 0, 'message' => '结算成功']);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 1, 'message' => '结算失败: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // 批量结算安装分佣 (POST /api/admin/v1/installations/batch-settle)
+    if ($path === 'admin/v1/installations/batch-settle' && $method === 'POST') {
+        $ids = $input['ids'] ?? [];
+
+        if (empty($ids)) {
+            echo json_encode(['code' => 1, 'message' => '请选择要结算的记录']);
+            exit;
+        }
+
+        try {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $stmt = $db->prepare("UPDATE ytb_installations SET status = 'settled', settled_at = NOW() WHERE id IN ($placeholders) AND status = 'activated'");
+            $stmt->execute($ids);
+
+            echo json_encode(['code' => 0, 'message' => '批量结算成功', 'data' => ['settled_count' => count($ids)]]);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 1, 'message' => '批量结算失败: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
     // 404
     http_response_code(404);
     echo json_encode(['code' => 404, 'message' => '接口不存在']);

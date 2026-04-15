@@ -258,10 +258,11 @@ const fetchOrders = async () => {
     }
 
     const response = await waterEngineerApi.getWorkOrders(params);
-    
+
     if (response.code === 0) {
-      orderList.value = response.data?.list || response.data || [];
-      pagination.total = response.data?.total || response.meta?.total || orderList.value.length;
+      const listData = response.data?.data ?? response.data?.list ?? response.data ?? [];
+      orderList.value = Array.isArray(listData) ? listData : [];
+      pagination.total = response.data?.total ?? response.meta?.total ?? 0;
     } else {
       ElMessage.error(response.message || '获取工单列表失败');
     }
