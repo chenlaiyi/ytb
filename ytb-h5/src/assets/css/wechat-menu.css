@@ -1,0 +1,965 @@
+/* 微信菜单管理样式 - 严格按照w.itapgo.com项目设计 */
+
+/* 基础布局 */
+#wechat_menu {
+  background: #fff;
+  min-height: 100vh;
+}
+
+/* 菜单状态控制区域 */
+.platform-menu-status {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.platform-menu-status .icon {
+  margin-right: 15px;
+  font-size: 24px;
+}
+
+.platform-menu-status .desc {
+  flex: 1;
+}
+
+.platform-menu-status .desc .item {
+  line-height: 1.5;
+  margin-bottom: 2px;
+}
+
+.platform-menu-status .action {
+  margin-left: auto;
+}
+
+/* 功能未开启提示 */
+.platform-menu-close {
+  padding: 20px;
+  text-align: center;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  color: #6c757d;
+}
+
+/* 标签页 */
+.we7-page-tab {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+}
+
+.we7-page-tab li {
+  margin-right: 20px;
+}
+
+.we7-page-tab li a {
+  display: block;
+  padding: 10px 15px;
+  text-decoration: none;
+  color: #666;
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s;
+}
+
+.we7-page-tab li.active a {
+  color: #007bff;
+  border-bottom-color: #007bff;
+}
+
+/* 历史菜单列表 */
+.we7-margin-bottom {
+  margin-bottom: 15px;
+}
+
+.btn-group-sub {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+}
+
+.btn-group-sub .btn {
+  padding: 6px 12px;
+  margin-right: 5px;
+  border: 1px solid #ddd;
+  background: #fff;
+  text-decoration: none;
+  color: #666;
+  border-radius: 3px;
+}
+
+.btn-group-sub .btn.active {
+  background: #007bff;
+  color: #fff;
+  border-color: #007bff;
+}
+
+.we7-padding-horizontal {
+  padding-left: 15px;
+  padding-right: 15px;
+}
+
+/* 表格样式 */
+.we7-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.we7-table th,
+.we7-table td {
+  padding: 12px;
+  border: 1px solid #ddd;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.we7-table th {
+  background: #f8f9fa;
+  font-weight: bold;
+}
+
+.we7-table .text-left {
+  text-align: left;
+}
+
+.we7-table .text-right {
+  text-align: right;
+}
+
+/* 开关样式 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  background-color: #ccc;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+
+.switch.switchOn {
+  background-color: #007bff;
+}
+
+.switch.switchOn::after {
+  transform: translateX(20px);
+}
+
+/* 链接组 */
+.link-group a {
+  color: #007bff;
+  text-decoration: none;
+  margin-right: 10px;
+}
+
+.link-group a:hover {
+  text-decoration: underline;
+}
+
+.link-group a.del {
+  color: #dc3545;
+}
+
+/* 菜单编辑区域 */
+.conditionMenu {
+  background: #fff;
+}
+
+.we7-breadcrumb {
+  list-style: none;
+  padding: 8px 15px;
+  margin-bottom: 20px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.we7-breadcrumb a {
+  color: #007bff;
+  text-decoration: none;
+  margin-right: 10px;
+}
+
+.we7-breadcrumb li {
+  color: #6c757d;
+}
+
+/* 表单样式 */
+.we7-form {
+  max-width: 100%;
+}
+
+.form-group {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.control-label {
+  width: 150px;
+  padding-top: 7px;
+  margin-bottom: 0;
+  text-align: right;
+  font-weight: normal;
+  color: #333;
+  flex-shrink: 0;
+}
+
+.form-controls {
+  flex: 1;
+  margin-left: 15px;
+}
+
+.form-control {
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.42857143;
+  color: #555;
+  background-color: #fff;
+  box-sizing: border-box;
+}
+
+.help-block {
+  display: block;
+  margin-top: 5px;
+  margin-bottom: 10px;
+  color: #737373;
+  font-size: 12px;
+}
+
+/* 下拉选择框 */
+.we7-margin-right {
+  margin-right: 10px;
+}
+
+.pull-left {
+  float: left;
+}
+
+/* 菜单设置区域 */
+.menu-setting-area {
+  display: flex;
+  gap: 30px;
+  margin-top: 30px;
+}
+
+/* 手机预览区域 */
+.menu-preview-area {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+.mobile-menu-preview {
+  width: 300px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.mobile-hd {
+  padding: 15px;
+  background: #007bff;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.mobile-bd {
+  padding: 0;
+}
+
+/* 微信菜单样式 */
+.js-quickmenu {
+  border-top: 1px solid #e5e5e5;
+}
+
+.designer-x {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.pre-menu-item {
+  flex: 1;
+  position: relative;
+  border-right: 1px solid #e5e5e5;
+}
+
+.pre-menu-item:last-child {
+  border-right: none;
+}
+
+.pre-menu-link {
+  display: block;
+  padding: 15px 8px;
+  text-align: center;
+  text-decoration: none;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  position: relative;
+}
+
+.pre-menu-link:hover,
+.pre-menu-item.active .pre-menu-link {
+  background-color: #f0f0f0;
+}
+
+.icon-menu-dot {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid #999;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+
+.icon14-menu-add {
+  font-size: 14px;
+  color: #999;
+}
+
+/* 子菜单 */
+.sub-pre-menu-box {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-bottom: none;
+  z-index: 10;
+  display: none;
+}
+
+.pre-menu-item:hover .sub-pre-menu-box {
+  display: block;
+}
+
+.sub-designer-y {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sub-js-sortable {
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.sub-js-sortable:last-child {
+  border-bottom: none;
+}
+
+.sub-pre-menu-inner {
+  display: block;
+  padding: 12px 15px;
+  color: #333;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.sub-pre-menu-inner:hover {
+  background-color: #f0f0f0;
+}
+
+.sub-js-not-sortable {
+  padding: 12px 15px;
+  text-align: center;
+  color: #999;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.sub-js-not-sortable:hover {
+  background-color: #f0f0f0;
+}
+
+/* 菜单配置区域 */
+.menu-form-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-initial-tips {
+  padding: 60px 20px;
+  text-align: center;
+  color: #999;
+  font-size: 16px;
+  background: #f8f9fa;
+  border: 1px dashed #ddd;
+  border-radius: 4px;
+}
+
+.portable-editor {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.editor-inner {
+  padding: 0;
+}
+
+.menu-form-hd {
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.font-defalut {
+  font-weight: bold;
+  color: #333;
+}
+
+.we7-padding-top {
+  padding-top: 20px;
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-bottom: 20px;
+}
+
+/* 输入组 */
+.input-group {
+  display: flex;
+  width: 100%;
+}
+
+.input-group .form-control {
+  flex: 1;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.input-group-btn {
+  display: flex;
+}
+
+.input-group-btn .btn {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-left: none;
+  background: #f8f9fa;
+  color: #333;
+  text-decoration: none;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  white-space: nowrap;
+}
+
+.bg-default {
+  background: #f8f9fa !important;
+}
+
+.color-default {
+  color: #007bff !important;
+}
+
+/* 单选按钮 */
+.form-controls input[type="radio"] {
+  margin-right: 5px;
+}
+
+.form-controls label {
+  margin-right: 15px;
+  margin-bottom: 0;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+/* 面板 */
+.we7-panel {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.panel-new {
+  background: #fff;
+}
+
+.panel-heading {
+  padding: 10px 15px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+  font-weight: bold;
+}
+
+.panel-body {
+  padding: 15px;
+}
+
+.we7-padding {
+  padding: 15px;
+}
+
+.we7-padding-vertical-max {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+/* 关键字列表 */
+.keywords-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 15px 0;
+}
+
+.keywords-list li {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.keywords-list .desc {
+  color: #333;
+}
+
+.keywords-list .title-wrp {
+  text-decoration: none;
+  color: #333;
+}
+
+.keywords-list .title {
+  font-weight: bold;
+}
+
+/* 回复类型选择 */
+.tab-reply-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 20px;
+}
+
+.tab-reply-item {
+  text-align: center;
+  cursor: pointer;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  transition: all 0.3s;
+  flex: 1;
+}
+
+.tab-reply-item:hover {
+  border-color: #007bff;
+  background: #f8f9fa;
+}
+
+.reply-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+
+.msg-tab-title {
+  margin: 0;
+  font-size: 12px;
+  color: #333;
+}
+
+/* 底部提交按钮 */
+.menu-submit {
+  padding: 20px;
+  border-top: 1px solid #ddd;
+  background: #f8f9fa;
+  text-align: left;
+}
+
+.menu-submit .btn {
+  margin-right: 10px;
+  padding: 8px 20px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+}
+
+.menu-submit .btn-primary {
+  background: #007bff;
+  color: #fff;
+  border-color: #007bff;
+}
+
+.menu-submit .btn-default {
+  background: #f8f9fa;
+  color: #333;
+  border-color: #ddd;
+}
+
+/* 预览弹窗 */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-preview {
+  width: 350px;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  position: relative;
+}
+
+.mobile-preview-hd {
+  padding: 15px;
+  background: #007bff;
+  color: white;
+  text-align: center;
+}
+
+.mobile-preview-hd .nickname {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.mobile-preview-bd {
+  height: 400px;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.show-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.mobile-preview-ft {
+  border-top: 1px solid #e5e5e5;
+}
+
+.grid-line {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.grid-item {
+  flex: 1;
+  position: relative;
+  border-right: 1px solid #e5e5e5;
+}
+
+.grid-item:last-child {
+  border-right: none;
+}
+
+.mobile-preview-closed {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.5);
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+/* 箭头 */
+.arrow {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+}
+
+.arrow-out {
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #ddd;
+}
+
+.arrow-in {
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #fff;
+  bottom: -5px;
+}
+
+/* 响应式菜单类 */
+.has-nav-0 .pre-menu-item {
+  flex: 0 0 100%;
+}
+
+.has-nav-1 .pre-menu-item {
+  flex: 0 0 100%;
+}
+
+.has-nav-2 .pre-menu-item {
+  flex: 0 0 50%;
+}
+
+.has-nav-3 .pre-menu-item {
+  flex: 0 0 33.333333%;
+}
+
+/* 颜色类 */
+.color-gray {
+  color: #6c757d !important;
+}
+
+.color-default {
+  color: #007bff !important;
+}
+
+/* 浮动和清除 */
+.pull-right {
+  float: right;
+}
+
+.pull-left {
+  float: left;
+}
+
+.clearfix::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* 列宽 */
+.col-sm-2 {
+  width: 16.66666667%;
+}
+
+.col-sm-7 {
+  width: 58.33333333%;
+}
+
+.col-sm-8 {
+  width: 66.66666667%;
+}
+
+.col-sm-10 {
+  width: 83.33333333%;
+}
+
+.col-sm-12 {
+  width: 100%;
+}
+
+/* 垂直对齐 */
+.vertical-middle {
+  vertical-align: middle;
+}
+
+/* 文本对齐 */
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+/* 按钮样式 */
+.btn {
+  display: inline-block;
+  padding: 6px 12px;
+  margin-bottom: 0;
+  font-size: 14px;
+  font-weight: normal;
+  line-height: 1.42857143;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  text-decoration: none;
+  color: #333;
+  background-color: #fff;
+  border-color: #ccc;
+}
+
+.btn-primary {
+  color: #fff;
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.btn-default {
+  color: #333;
+  background-color: #fff;
+  border-color: #ccc;
+}
+
+.btn:hover {
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+.btn-default:hover {
+  background-color: #f8f9fa;
+  border-color: #adb5bd;
+}
+
+/* 图标字体 */
+.wi {
+  font-family: 'WeChat-Icons', sans-serif;
+}
+
+.wi-custommenu::before {
+  content: '☰';
+}
+
+.wi-info::before {
+  content: 'ℹ';
+}
+
+.wi-back-circle::before {
+  content: '←';
+}
+
+.fa {
+  font-family: 'FontAwesome', sans-serif;
+}
+
+.fa-plus::before {
+  content: '+';
+}
+
+/* 隐藏元素 */
+.js-not-sortable .pre-menu-link {
+  color: #999;
+  border: 1px dashed #ddd;
+  background: #f8f9fa;
+}
+
+/* 媒体查询 - 移动端适配 */
+@media (max-width: 768px) {
+  .menu-setting-area {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .menu-preview-area {
+    width: 100%;
+  }
+  
+  .mobile-menu-preview {
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
+  }
+  
+  .form-group {
+    flex-direction: column;
+  }
+  
+  .control-label {
+    width: 100%;
+    text-align: left;
+    margin-bottom: 5px;
+  }
+  
+  .form-controls {
+    margin-left: 0;
+  }
+}
+
+/* 禁用状态 */
+.form-control:disabled {
+  background-color: #e9ecef;
+  opacity: 1;
+}
+
+select.form-control:disabled {
+  background-color: #e9ecef;
+}
+
+/* 表单验证状态 */
+.has-error .form-control {
+  border-color: #dc3545;
+}
+
+.has-success .form-control {
+  border-color: #28a745;
+}
+
+/* 加载状态 */
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* 动画效果 */
+.fade {
+  opacity: 0;
+  transition: opacity 0.15s linear;
+}
+
+.fade.show {
+  opacity: 1;
+}
+
+/* 工具提示 */
+.tips-global {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  color: #856404;
+  border-radius: 4px;
+} 

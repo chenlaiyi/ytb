@@ -1,0 +1,135 @@
+/* 使用自定义图标 - 本地字体文件 */
+@font-face {
+  font-family: "van-icons";
+  src: url("/app/icons/vant-icon.woff2") format("woff2"),
+       url("/app/icons/vant-icon.woff") format("woff"),
+       url("/app/icons/vant-icon.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: auto;
+}
+
+.icon-font {
+  font-family: "van-icons" !important;
+  font-size: 16px;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-home:before {
+  content: "\e600";
+}
+
+.icon-device:before {
+  content: "\e601";
+}
+
+.icon-water:before {
+  content: "\e602";
+}
+
+.icon-shop:before {
+  content: "\e603";
+}
+
+.icon-user:before {
+  content: "\e604";
+}
+
+.icon-wallet:before {
+  content: "\e605";
+}
+
+.icon-location:before {
+  content: "\e606";
+}
+
+.icon-mobile:before {
+  content: "\e607";
+}
+
+.icon-feedback:before {
+  content: "\e608";
+}
+
+.icon-help:before {
+  content: "\e609";
+}
+
+.icon-setting:before {
+  content: "\e60a";
+}
+
+/* 下面是直接引用material icons的符号 */
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+.icon-payment:before {
+  content: "\e63c";
+}
+
+.icon-filter:before {
+  content: "\e6d7";
+}
+
+.icon-engineer:before {
+  content: "\e68d";
+}
+
+.icon-channel:before {
+  content: "\e60e";
+}
+
+.icon-merchant:before {
+  content: "\e737";
+}
+
+.icon-vip:before {
+  content: "\e62c";
+}
+
+.icon-sales:before {
+  content: "\e655";
+}
+
+.icon-admin:before {
+  content: "\e657";
+}
+
+.icon-arrow:before {
+  content: "\e665";
+}
+
+.icon-pay:before {
+  content: "\e672";
+}
+
+.icon-shipping:before {
+  content: "\e63e";
+}
+
+.icon-delivery:before {
+  content: "\e649";
+}
+
+.icon-comment:before {
+  content: "\e64f";
+}
+
+.icon-service:before {
+  content: "\e634";
+} 

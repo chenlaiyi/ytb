@@ -1,0 +1,68 @@
+import request from '@/utils/request'
+
+/**
+ * VIP V1版本API接口
+ * 基础路径: /api/mobile/v1/vip
+ */
+
+/**
+ * 获取VIP团队信息
+ * @param {Object} params - 请求参数
+ * @param {string} params.user_id - 用户ID
+ * @param {string} params.month - 月份 ('current' | 'last')
+ * @param {boolean} params.silentError - 是否静默处理错误
+ * @returns {Promise}
+ */
+export function getVipTeamInfoV1(params) {
+  // 提取silentError参数
+  const { silentError, ...requestParams } = params || {};
+  
+  return request({
+    url: '/api/mobile/v1/vip/team-info',
+    method: 'post',
+    data: requestParams,
+    // 传递silentError标志
+    silentError: silentError
+  })
+}
+
+/**
+ * 获取VIP奖金池信息
+ * @param {Object} params - 请求参数
+ * @param {string} params.month - 月份 ('current' | 'last')
+ * @param {boolean} params.silentError - 是否静默处理错误
+ * @returns {Promise}
+ */
+export function getVipPoolInfoV1(params) {
+  // 提取silentError参数
+  const { silentError, ...requestParams } = params || {};
+  
+  return request({
+    url: '/api/mobile/v1/vip/pool-info',
+    method: 'post',
+    data: requestParams,
+    // 传递silentError标志
+    silentError: silentError
+  })
+}
+
+/**
+ * 获取VIP分红信息
+ * @param {Object} params - 请求参数
+ * @param {string} params.user_id - 用户ID
+ * @param {string} params.month - 月份 ('current' | 'last')
+ * @param {boolean} params.silentError - 是否静默处理错误
+ * @returns {Promise}
+ */
+export function getVipDividendInfoV1(params) {
+  // 提取silentError参数
+  const { silentError, ...requestParams } = params || {};
+  
+  return request({
+    url: '/api/mobile/v1/vip/dividend-info',
+    method: 'post',
+    data: requestParams,
+    // 传递silentError标志
+    silentError: silentError
+  })
+}

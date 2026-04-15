@@ -1,0 +1,106 @@
+/* Vant图标字体定义 */
+@font-face {
+  font-family: 'vant-icon';
+  src: url('/app/vant-icons/fonts/vant-icon.woff2') format('woff2'),
+       url('/app/vant-icons/fonts/vant-icon.woff') format('woff'),
+       url('/app/vant-icons/fonts/vant-icon.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: auto;
+}
+
+/* 图标基础类 */
+.van-icon,
+[class^="van-icon-"],
+[class*=" van-icon-"] {
+  font-family: 'vant-icon' !important;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 定义常用图标码点 */
+.van-icon-home-o:before,
+.van-icon-home:before { content: "\F218"; }
+
+.van-icon-shop-o:before,
+.van-icon-shop:before { content: "\F319"; }
+
+.van-icon-cart-o:before,
+.van-icon-cart:before { content: "\F102"; }
+
+.van-icon-location-o:before,
+.van-icon-location:before { content: "\F267"; }
+
+.van-icon-user-o:before,
+.van-icon-user:before { content: "\F335"; }
+
+.van-icon-setting-o:before,
+.van-icon-setting:before { content: "\F311"; }
+
+.van-icon-search:before { content: "\F307"; }
+
+.van-icon-like-o:before,
+.van-icon-like:before { content: "\F255"; }
+
+.van-icon-star-o:before,
+.van-icon-star:before { content: "\F342"; }
+
+.van-icon-phone-o:before,
+.van-icon-phone:before { content: "\F29F"; }
+
+.van-icon-service-o:before,
+.van-icon-service:before { content: "\F310"; }
+
+.van-icon-orders-o:before,
+.van-icon-orders:before { content: "\F298"; }
+
+.van-icon-gift-o:before,
+.van-icon-gift:before { content: "\F1F0"; }
+
+.van-icon-balance-o:before,
+.van-icon-balance:before { content: "\F0C0"; }
+
+.van-icon-coupon-o:before,
+.van-icon-coupon:before { content: "\F162"; }
+
+.van-icon-fire-o:before,
+.van-icon-fire:before { content: "\F1C4"; }
+
+.van-icon-goods-collect-o:before,
+.van-icon-goods-collect:before { content: "\F1FB"; }
+
+.van-icon-hot-o:before,
+.van-icon-hot:before { content: "\F21C"; }
+
+.van-icon-chat-o:before,
+.van-icon-chat:before { content: "\F122"; }
+
+.van-icon-friends-o:before,
+.van-icon-friends:before { content: "\F1DB"; }
+
+.van-icon-gem-o:before,
+.van-icon-gem:before { content: "\F1E7"; }
+
+.van-icon-apps-o:before,
+.van-icon-apps:before { content: "\F0E3"; }
+
+.van-icon-plus:before { content: "\F2A6"; }
+.van-icon-more-o:before { content: "\F287"; }
+.van-icon-more:before { content: "\F286"; }
+.van-icon-certificate:before { content: "\F154"; }
+.van-icon-arrow:before { content: "\F0E4"; }
+.van-icon-arrow-left:before { content: "\F0E5"; }
+.van-icon-arrow-right:before { content: "\F0E6"; }
+.van-icon-arrow-up:before { content: "\F0E7"; }
+.van-icon-arrow-down:before { content: "\F0E8"; }
+.van-icon-balance-pay:before { content: "\F0BF"; }
+.van-icon-logistics:before { content: "\F273"; }
+.van-icon-sign:before { content: "\F31E"; }
+.van-icon-comment-o:before { content: "\F149"; }
+.van-icon-gold-coin-o:before { content: "\F1EF"; }
+.van-icon-cluster-o:before { content: "\F13B"; }
+.van-icon-question-o:before { content: "\F2A4"; }
+.van-icon-diamond-o:before { content: "\F176"; }
+.van-icon-manager-o:before { content: "\F276"; }
+.van-icon-filter-o:before { content: "\F1C3"; } 

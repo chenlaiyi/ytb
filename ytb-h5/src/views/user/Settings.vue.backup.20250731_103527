@@ -1,0 +1,324 @@
+<template>
+  <div class="settings-container">
+    <!-- 移除蓝色导航条，界面更简洁 -->
+    
+    <div class="settings-content">
+      <!-- 个人资料 -->
+      <div class="settings-section">
+        <Cell title="个人资料" is-link @click="goToProfile">
+          <template #icon>
+            <Icon name="user-circle-o" class="cell-icon" />
+          </template>
+        </Cell>
+        <Cell title="实名认证" is-link @click="goToVerification">
+          <template #icon>
+            <Icon name="idcard" class="cell-icon" />
+          </template>
+          <template #right-icon>
+            <Tag type="primary" v-if="userInfo.isVerified">已认证</Tag>
+            <Tag type="warning" v-else>未认证</Tag>
+          </template>
+        </Cell>
+        <Cell title="账号安全" is-link @click="goToSecurity">
+          <template #icon>
+            <Icon name="shield-o" class="cell-icon" />
+          </template>
+        </Cell>
+      </div>
+      
+      <!-- 支付设置 -->
+      <div class="settings-section">
+        <Cell title="支付管理" is-link @click="goToPayment">
+          <template #icon>
+            <Icon name="balance-pay" class="cell-icon" />
+          </template>
+        </Cell>
+        <Cell title="提现/结算管理" is-link @click="goToBankCard">
+          <template #icon>
+            <Icon name="credit-pay" class="cell-icon" />
+          </template>
+        </Cell>
+      </div>
+      
+      <!-- 应用设置 -->
+      <div class="settings-section">
+        <Cell title="通知设置" is-link @click="goToNotification">
+          <template #icon>
+            <Icon name="bell" class="cell-icon" />
+          </template>
+        </Cell>
+        <Cell title="隐私设置" is-link @click="goToPrivacy">
+          <template #icon>
+            <Icon name="eye-o" class="cell-icon" />
+          </template>
+        </Cell>
+        <Cell title="清除缓存" is-link @click="clearCache">
+          <template #icon>
+            <Icon name="delete" class="cell-icon" />
+          </template>
+          <template #right-icon>
+            <span class="cache-size">{{ cacheSize }}</span>
+          </template>
+        </Cell>
+      </div>
+      
+      <!-- 关于我们 -->
+      <div class="settings-section">
+        <Cell title="关于我们" is-link @click="goToAbout">
+          <template #icon>
+            <Icon name="info-o" class="cell-icon" />
+          </template>
+        </Cell>
+        <Cell title="用户协议" is-link @click="goToAgreement">
+          <template #icon>
+            <Icon name="notes-o" class="cell-icon" />
+          </template>
+        </Cell>
+        <Cell title="隐私政策" is-link @click="goToPrivacyPolicy">
+          <template #icon>
+            <Icon name="label-o" class="cell-icon" />
+          </template>
+        </Cell>
+      </div>
+      
+      <!-- 应用信息 -->
+      <div class="settings-app-info">
+        <img src="/images/logo.png" alt="点点够Logo" class="app-logo" />
+        <div class="app-name">点点够</div>
+        <div class="app-version">版本 1.0.0</div>
+      </div>
+      
+      <!-- 退出登录 -->
+      <div class="settings-logout">
+        <Button round block color="#ff4d4f" @click="handleLogout">
+          退出登录
+        </Button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { Cell, Button, Icon, Tag } from 'vant'
+import { getUserInfo, logout as userLogout } from '@/api/user'
+import { useUserStore } from '@/stores/user'
+import Toast from '@/utils/toast-fix'
+
+const router = useRouter()
+const cacheSize = ref('12.5MB')
+
+// 用户信息
+const userInfo = ref({
+  isVerified: false, // 实名认证状态
+  is_pay_institution: 0 // 支付机构角色
+})
+
+// 获取用户信息
+const fetchUserInfo = async () => {
+  try {
+    const res = await getUserInfo()
+    if (res.code === 0) {
+      userInfo.value = res.data || {}
+      
+      // 处理认证状态
+      if (res.data) {
+        // 如果是支付机构角色，且有姓名和身份证号，视为已认证
+        if (res.data.is_pay_institution === 1 && 
+            res.data.name && res.data.institution_sfz) {
+          userInfo.value.isVerified = true
+        }
+        
+        // 这里可以处理其他认证状态逻辑
+      }
+    }
+  } catch (error) {
+    console.error('获取用户信息失败', error)
+  }
+}
+
+// 页面跳转方法
+const goToProfile = () => router.push('/user/settings/profile')
+const goToVerification = () => router.push('/user/settings/verification')
+const goToSecurity = () => router.push('/user/settings/security')
+const goToPayment = () => router.push('/user/settings/payment')
+const goToBankCard = () => router.push('/user/settings/bank-card')
+const goToNotification = () => router.push('/user/settings/notification')
+const goToPrivacy = () => router.push('/user/settings/privacy')
+const goToAbout = () => router.push('/user/settings/about')
+const goToAgreement = () => router.push('/user/settings/agreement')
+const goToPrivacyPolicy = () => router.push('/user/settings/privacy-policy')
+
+// 显示开发中提示
+const showDevelopingToast = (feature) => {
+  Toast(`${feature}功能开发中...`)
+}
+
+// 清除缓存
+const clearCache = () => {
+  Toast.confirm({
+    title: '提示',
+    message: '确定要清除应用缓存吗？',
+    confirmButtonText: '清除',
+    confirmButtonColor: '#1989fa',
+    cancelButtonText: '取消',
+    messageAlign: 'center'
+  }).then(() => {
+    // 显示加载中
+    const loading = Toast.loading({
+      message: '清除中...',
+      forbidClick: true
+    });
+    
+    // 模拟清除缓存
+    setTimeout(() => {
+      // 只清除非关键缓存
+      try {
+        // 清除localStorage中非关键数据
+        const keysToKeep = ['token', 'userInfo'];
+        Object.keys(localStorage).forEach(key => {
+          if (!keysToKeep.includes(key)) {
+            localStorage.removeItem(key);
+          }
+        });
+        
+        // 清除sessionStorage
+        sessionStorage.clear();
+        
+        // 不清除cookie，避免影响登录状态
+        
+        // 更新缓存大小显示
+        cacheSize.value = '0MB';
+        
+        // 清除加载提示
+        loading.clear();
+        
+        // 显示成功消息
+        Toast.success('缓存清除成功');
+      } catch (error) {
+        console.error('清除缓存失败', error);
+        loading.clear();
+        Toast({ type: 'fail', message: '清除缓存失败' });
+      }
+    }, 1000);
+  }).catch(() => {
+    // 取消操作
+  });
+}
+
+// 退出登录
+const handleLogout = () => {
+  Toast.confirm({
+    title: '提示',
+    message: '确定要退出登录吗？',
+    confirmButtonText: '退出登录',
+    confirmButtonColor: '#ff4d4f',
+    cancelButtonText: '取消',
+    messageAlign: 'center'
+  }).then(async () => {
+    try {
+      // 调用后端登出API
+      await userLogout()
+      
+      // 清除所有登录状态
+      localStorage.clear()
+      sessionStorage.clear()
+      
+      // 清除用户状态管理中的数据
+      const userStore = useUserStore()
+      userStore.clearUserInfo()
+      
+      Toast.success('已退出登录')
+      
+      // 立即跳转到登录页
+      router.replace('/login')
+    } catch (error) {
+      console.error('退出登录失败', error)
+      
+      // 即使API调用失败，也要清除本地状态
+      localStorage.clear()
+      sessionStorage.clear()
+      
+      const userStore = useUserStore()
+      userStore.clearUserInfo()
+      
+      Toast.success('已退出登录')
+      router.replace('/login')
+    }
+  }).catch(() => {
+    // 取消操作
+  })
+}
+
+// 页面加载时获取数据
+onMounted(() => {
+  console.log('设置页面加载')
+  
+  // 强制隐藏底部导航 - 直接操作DOM确保TabBar被隐藏
+  const tabbarElements = document.querySelectorAll('.van-tabbar, .tab-bar-container')
+  tabbarElements.forEach(el => {
+    if (el) {
+      el.style.display = 'none'
+    }
+  })
+  
+  fetchUserInfo()
+})
+</script>
+
+<style scoped>
+.settings-container {
+  min-height: 100vh;
+  background-color: #f7f8fa;
+  padding-top: 20px; /* 添加顶部内边距替代导航条空间 */
+}
+
+.settings-content {
+  padding-bottom: 30px;
+}
+
+.settings-section {
+  margin: 12px 0;
+  background: #fff;
+}
+
+.cell-icon {
+  margin-right: 5px;
+  font-size: 18px;
+  color: var(--primary-color, #1989fa);
+}
+
+.cache-size {
+  font-size: 14px;
+  color: #999;
+}
+
+.settings-app-info {
+  margin-top: 24px;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.app-logo {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 12px;
+}
+
+.app-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.app-version {
+  font-size: 12px;
+  color: #999;
+}
+
+.settings-logout {
+  margin: 24px 16px;
+}
+</style>

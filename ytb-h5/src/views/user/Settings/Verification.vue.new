@@ -1,0 +1,588 @@
+<template>
+  <div class="verification-container">
+    <NavBar
+      title="实名认证"
+      left-text="返回"
+      left-arrow
+      @click-left="$router.back()"
+      fixed
+      placeholder
+    />
+    
+    <div class="verification-content">
+      <!-- 认证状态展示 -->
+      <div class="status-section" v-if="verificationStatus !== 'none'">
+        <div v-if="verificationStatus === 'verified'" class="status-card verified">
+          <Icon name="success" size="40" color="#07c160" />
+          <div class="status-title">已实名认证</div>
+          <div class="status-desc">您已完成实名认证</div>
+        </div>
+        
+        <div v-else-if="verificationStatus === 'pending'" class="status-card pending">
+          <Icon name="underway-o" size="40" color="#1989fa" />
+          <div class="status-title">认证审核中</div>
+          <div class="status-desc">您的实名认证正在审核，请耐心等待</div>
+        </div>
+        
+        <div v-else-if="verificationStatus === 'rejected'" class="status-card rejected">
+          <Icon name="cross" size="40" color="#ee0a24" />
+          <div class="status-title">认证未通过</div>
+          <div class="status-desc">原因：{{ rejectReason }}</div>
+          <Button type="primary" size="small" @click="resetForm">重新认证</Button>
+        </div>
+      </div>
+      
+      <!-- 认证信息展示 -->
+      <div class="info-card" v-if="verificationStatus === 'verified'">
+        <div class="card-title">认证信息</div>
+        <Cell title="姓名" :value="maskName(verificationInfo.realName)" />
+        <Cell title="身份证号" :value="maskIdCard(verificationInfo.idCard)" />
+        <Cell title="认证时间" :value="formatDate(verificationInfo.verifiedAt)" />
+      </div>
+      
+      <!-- 认证表单 -->
+      <div class="form-section" v-if="verificationStatus === 'none' || showForm || (isPayInstitution && !userInfo.institution_sfz)">
+        <div class="form-title">填写认证信息</div>
+        <div class="form-desc">请填写真实信息，认证成功后将不可修改</div>
+        
+        <!-- 支付机构用户提示 -->
+        <div class="institution-tip" v-if="isPayInstitution && !userInfo.institution_sfz">
+          <NoticeBar
+            color="#1989fa"
+            background="#ecf9ff"
+            left-icon="info-o"
+          >
+            您需要完成实名认证才能使用完整功能
+          </NoticeBar>
+        </div>
+        
+        <Field 
+          v-model="form.realName" 
+          label="真实姓名" 
+          placeholder="请输入真实姓名"
+          :rules="[{ required: true, message: '请输入真实姓名' }]"
+        />
+        
+        <Field 
+          v-model="form.idCard" 
+          label="身份证号" 
+          placeholder="请输入18位身份证号码"
+          :rules="[
+            { required: true, message: '请输入身份证号' },
+            { pattern: /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/, message: '请输入正确的身份证号' }
+          ]"
+        />
+        
+        <div class="id-card-upload">
+          <div class="upload-title">上传证件照片</div>
+          
+          <!-- 正面照片上传 -->
+          <div class="upload-item">
+            <div class="upload-label">身份证正面照片</div>
+            <div class="upload-box" @click="uploadImage('front')">
+              <img v-if="form.frontImage" :src="form.frontImage" class="preview-image" />
+              <div v-else class="upload-placeholder">
+                <Icon name="photograph-o" size="24" />
+                <div>点击上传</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 反面照片上传 -->
+          <div class="upload-item">
+            <div class="upload-label">身份证反面照片</div>
+            <div class="upload-box" @click="uploadImage('back')">
+              <img v-if="form.backImage" :src="form.backImage" class="preview-image" />
+              <div v-else class="upload-placeholder">
+                <Icon name="photograph-o" size="24" />
+                <div>点击上传</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="agreement-section">
+          <Checkbox v-model="form.agreement">我已阅读并同意</Checkbox>
+          <span class="agreement-link" @click="showAgreement">《实名认证服务协议》</span>
+        </div>
+        
+        <div class="submit-btn">
+          <Button round block type="primary" @click="handleSubmit" :disabled="!form.agreement">提交认证</Button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { NavBar, Cell, Field, Button, Icon, Toast, Checkbox, Dialog, NoticeBar } from 'vant'
+import { getVerificationStatus, submitVerification, getUserInfo, updateUserProfile } from '@/api/user'
+import { formatDate } from '@/utils/format'
+
+// 认证状态: none(未认证), pending(审核中), verified(已认证), rejected(已拒绝)
+const verificationStatus = ref('none')
+const rejectReason = ref('')
+const showForm = ref(false)
+
+// 认证信息
+const verificationInfo = ref({
+  realName: '',
+  idCard: '',
+  verifiedAt: ''
+})
+
+// 用户信息
+const userInfo = ref({
+  is_pay_institution: 0, // 是否支付机构
+  name: '', // 姓名
+  institution_sfz: '' // 身份证号
+})
+
+// 表单数据
+const form = ref({
+  realName: '',
+  idCard: '',
+  frontImage: '',
+  backImage: '',
+  agreement: false
+})
+
+// 获取用户信息
+const fetchUserInfo = async () => {
+  try {
+    const res = await getUserInfo()
+    if (res.code === 0 && res.data) {
+      userInfo.value = res.data
+      
+      // 如果是支付机构并且有身份证和姓名信息
+      if (res.data.is_pay_institution === 1) {
+        console.log('检测到支付机构角色用户，加载身份信息')
+        
+        // 自动填充实名信息
+        if (verificationStatus.value === 'none' || showForm.value) {
+          if (res.data.name) {
+            form.value.realName = res.data.name
+          }
+          
+          if (res.data.institution_sfz) {
+            form.value.idCard = res.data.institution_sfz
+          }
+          
+          // 如果已经有姓名和身份证，则显示弱提示
+          if (res.data.name && res.data.institution_sfz) {
+            Toast('已从支付机构信息中自动填充身份信息')
+          }
+        }
+        
+        // 如果未认证但已有身份信息，自动更新认证信息
+        if (verificationStatus.value === 'none' && res.data.name && res.data.institution_sfz) {
+          verificationInfo.value.realName = res.data.name
+          verificationInfo.value.idCard = res.data.institution_sfz
+          verificationInfo.value.verifiedAt = formatDate(new Date())
+          verificationStatus.value = 'verified'
+        }
+      }
+    }
+  } catch (error) {
+    console.error('获取用户信息失败', error)
+  }
+}
+
+// 获取认证状态
+const fetchVerificationStatus = async () => {
+  try {
+    const res = await getVerificationStatus()
+    if (res.code === 0 && res.data) {
+      verificationStatus.value = res.data.status
+      
+      if (res.data.status === 'verified') {
+        verificationInfo.value = res.data.info
+      } else if (res.data.status === 'rejected') {
+        rejectReason.value = res.data.rejectReason || '身份信息有误'
+      }
+      
+      // 获取用户信息，检查是否为支付机构角色
+      await fetchUserInfo()
+    }
+  } catch (error) {
+    console.error('获取认证状态失败', error)
+    Toast('获取认证状态失败')
+    
+    // 即使认证状态获取失败，仍然尝试获取用户信息
+    await fetchUserInfo()
+  }
+}
+
+// 重设表单
+const resetForm = () => {
+  showForm.value = true
+  form.value = {
+    realName: '',
+    idCard: '',
+    frontImage: '',
+    backImage: '',
+    agreement: false
+  }
+  
+  // 如果是支付机构角色并有身份信息，自动填充
+  if (userInfo.value.is_pay_institution === 1) {
+    if (userInfo.value.name) {
+      form.value.realName = userInfo.value.name
+    }
+    
+    if (userInfo.value.institution_sfz) {
+      form.value.idCard = userInfo.value.institution_sfz
+    }
+  }
+}
+
+// 上传图片
+const uploadImage = (type) => {
+  // 创建文件输入元素
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    
+    // 检查文件类型和大小
+    if (!file.type.includes('image')) {
+      Toast('请上传图片文件')
+      return
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      Toast('图片大小不能超过5MB')
+      return
+    }
+    
+    // 这里应该调用上传API，暂时模拟
+    Toast.loading({
+      message: '上传中...',
+      forbidClick: true,
+    })
+    
+    // 模拟上传延迟
+    setTimeout(() => {
+      Toast.clear()
+      
+      // 预览上传的图片（实际项目中应该使用服务器返回的URL）
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        if (type === 'front') {
+          form.value.frontImage = e.target.result
+        } else {
+          form.value.backImage = e.target.result
+        }
+      }
+      reader.readAsDataURL(file)
+    }, 1000)
+  }
+  input.click()
+}
+
+// 显示协议
+const showAgreement = () => {
+  Dialog.alert({
+    title: '实名认证服务协议',
+    message: `
+      本协议是您与点点够之间关于实名认证服务的协议。
+      
+      一、服务内容
+      点点够提供实名认证服务，验证您的身份信息的真实性。
+      
+      二、信息保护
+      我们将严格保护您提供的个人信息，仅用于实名认证及法律法规要求的用途。
+      
+      三、信息真实性
+      您承诺提供的身份信息真实、准确、完整，如提供虚假信息，将承担相应的法律责任。
+      
+      四、服务变更
+      我们有权对实名认证服务进行变更或终止，但会提前通知您。
+    `,
+    confirmButtonText: '我已阅读'
+  })
+}
+
+// 提交认证
+const handleSubmit = async () => {
+  // 表单验证
+  if (!form.value.realName) {
+    Toast('请输入真实姓名')
+    return
+  }
+  
+  if (!form.value.idCard) {
+    Toast('请输入身份证号')
+    return
+  }
+  
+  // 正则验证身份证
+  const idCardReg = /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/
+  if (!idCardReg.test(form.value.idCard)) {
+    Toast('请输入正确的身份证号码')
+    return
+  }
+  
+  // 支付机构用户不强制要求上传照片
+  const isPayInstitution = userInfo.value.is_pay_institution === 1
+
+  if (!isPayInstitution && !form.value.frontImage) {
+    Toast('请上传身份证正面照片')
+    return
+  }
+  
+  if (!isPayInstitution && !form.value.backImage) {
+    Toast('请上传身份证反面照片')
+    return
+  }
+  
+  if (!form.value.agreement) {
+    Toast('请阅读并同意《实名认证服务协议》')
+    return
+  }
+  
+  // 调用提交API
+  try {
+    Toast.loading({
+      message: '提交中...',
+      forbidClick: true,
+    })
+    
+    const res = await submitVerification({
+      realName: form.value.realName,
+      idCard: form.value.idCard,
+      frontImage: form.value.frontImage,
+      backImage: form.value.backImage,
+      // 添加来源标识
+      fromPayInstitution: isPayInstitution
+    })
+    
+    Toast.clear()
+    
+    if (res.code === 0) {
+      Toast.success('提交成功')
+      // 更新认证信息和状态
+      verificationInfo.value.realName = form.value.realName
+      verificationInfo.value.idCard = form.value.idCard
+      verificationInfo.value.verifiedAt = formatDate(new Date())
+      verificationStatus.value = isPayInstitution ? 'verified' : 'pending'
+      showForm.value = false
+    } else {
+      Toast(res.message || '提交失败')
+    }
+  } catch (error) {
+    Toast.clear()
+    console.error('提交认证失败', error)
+    Toast('提交失败，请稍后重试')
+  }
+}
+
+// 姓名脱敏
+const maskName = (name) => {
+  if (!name) return ''
+  if (name.length <= 1) return '*'
+  if (name.length === 2) return name[0] + '*'
+  return name[0] + '*'.repeat(name.length - 2) + name[name.length - 1]
+}
+
+// 身份证号脱敏
+  // 从身份证提取生日和性别信息
+  await extractBirthdayAndGender(form.value.idCard);
+const maskIdCard = (idCard) => {
+  if (!idCard) return ''
+  if (idCard.length < 8) return idCard
+  return idCard.substr(0, 4) + '*'.repeat(idCard.length - 8) + idCard.substr(idCard.length - 4)
+}
+
+// 是否是支付机构角色
+const isPayInstitution = computed(() => userInfo.value.is_pay_institution === 1)
+
+// 页面加载时获取数据
+onMounted(() => {
+  fetchVerificationStatus()
+})
+</script>
+
+<style scoped>
+.verification-container {
+  min-height: 100vh;
+  background-color: #f7f8fa;
+}
+
+.verification-content {
+  padding: 16px;
+}
+
+.status-section {
+  margin-bottom: 16px;
+}
+
+.status-card {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.status-title {
+  margin-top: 12px;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.status-desc {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #666;
+  max-width: 80%;
+}
+
+.status-card.rejected .status-desc {
+  color: #ee0a24;
+  margin-bottom: 16px;
+}
+
+.info-card {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.form-section {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.form-title {
+  font-size: 16px;
+  font-weight: 500;
+// 从身份证提取生日和性别
+const extractBirthdayAndGender = async (idCard) => {
+  try {
+    // 检查身份证号码长度
+    if (idCard.length !== 18 && idCard.length !== 15) {
+      console.log("身份证号码长度不正确")
+      return
+    }
+    
+    let birthday, gender
+    
+    if (idCard.length === 18) {
+      // 从18位身份证提取出生日期: 第7-14位 (格式: YYYYMMDD)
+      birthday = `${idCard.substring(6, 10)}-${idCard.substring(10, 12)}-${idCard.substring(12, 14)}`
+      
+      // 从18位身份证提取性别信息: 第17位，奇数为男性，偶数为女性
+      gender = parseInt(idCard.charAt(16)) % 2 === 1 ? "男" : "女"
+    } else {
+      // 从15位身份证提取出生日期: 第7-12位 (格式: YYMMDD)，需要加上19作为年份前缀
+      birthday = `19${idCard.substring(6, 8)}-${idCard.substring(8, 10)}-${idCard.substring(10, 12)}`
+      
+      // 从15位身份证提取性别信息: 第15位，奇数为男性，偶数为女性
+      gender = parseInt(idCard.charAt(14)) % 2 === 1 ? "男" : "女"
+    }
+    
+    console.log("从身份证提取的信息:", { birthday, gender })
+    
+    // 调用更新用户资料API
+    if (birthday && gender) {
+      try {
+        await updateUserProfile({
+          birthday,
+          gender
+        })
+        console.log("已成功更新用户生日和性别信息")
+      } catch (error) {
+        console.error("更新用户资料失败", error)
+      }
+    }
+    
+  } catch (error) {
+    console.error("提取身份证信息出错", error)
+  }
+}
+  color: #333;
+}
+
+.form-desc {
+  font-size: 12px;
+  color: #999;
+  margin: 8px 0 16px;
+}
+
+.id-card-upload {
+  margin: 16px 0;
+}
+
+.upload-title {
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.upload-item {
+  margin-bottom: 16px;
+}
+
+.upload-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.upload-box {
+  width: 100%;
+  height: 150px;
+  border: 1px dashed #ddd;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #999;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.agreement-section {
+  margin: 20px 0;
+  display: flex;
+  align-items: center;
+}
+
+.agreement-link {
+  color: #1989fa;
+}
+
+.institution-tip {
+  margin: 12px 0;
+}
+
+.submit-btn {
+  margin: 24px 0 16px;
+}
+</style> 

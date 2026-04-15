@@ -1,0 +1,48 @@
+{
+  "name": "ddg-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:ytb": "vite build --mode ytb-standalone",
+    "build:force": "vite build --force",
+    "preview": "vite preview",
+    "postinstall": "node scripts/fix-vant-globalThis.cjs && node scripts/patch-axios-fetch.cjs && node scripts/fix-vant-browser.cjs"
+  },
+  "dependencies": {
+    "@antv/infographic": "^0.2.7",
+    "@vant/area-data": "^2.0.0",
+    "@vant/icons": "^3.0.2",
+    "animate.css": "^4.1.1",
+    "ant-design-vue": "^4.2.6",
+    "axios": "^1.6.7",
+    "canvas-confetti": "^1.9.3",
+    "dompurify": "^3.1.6",
+    "echarts": "^5.4.3",
+    "html2canvas": "^1.4.1",
+    "js-cookie": "^3.0.5",
+    "pinia": "^2.1.7",
+    "pinia-plugin-persistedstate": "^3.2.0",
+    "qrcode": "^1.5.4",
+    "regenerator-runtime": "^0.14.1",
+    "vant": "^4.9.22",
+    "vue": "^3.3.4",
+    "vue-router": "^4.2.5",
+    "vuex": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.17",
+    "@vitejs/plugin-legacy": "^4.1.1",
+    "@vitejs/plugin-vue": "^4.4.0",
+    "leaflet": "^1.9.4",
+    "less": "^4.2.0",
+    "less-loader": "^11.1.3",
+    "postcss": "^8.4.38",
+    "postcss-px-to-viewport": "^1.1.1",
+    "sass": "^1.86.2",
+    "unplugin-vue-components": "^0.25.2",
+    "vite": "^4.5.2"
+  }
+}

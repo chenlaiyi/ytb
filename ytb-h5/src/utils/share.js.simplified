@@ -1,0 +1,215 @@
+/**
+ * 简化版微信分享工具函数
+ */
+
+// 日志函数
+const log = (message, ...args) => {
+  console.log(`[微信分享] ${message}`, ...args);
+};
+
+const errorLog = (message, ...args) => {
+  console.error(`[微信分享错误] ${message}`, ...args);
+};
+
+/**
+ * 获取网站默认图标URL
+ */
+function getDefaultLogo() {
+  return 'https://pay.itapgo.com/app/images/logo.png';
+}
+
+/**
+ * 获取默认副标题
+ */
+function getDefaultSubtitle() {
+  return '每天进步一点点，实现富而喜悦人生。';
+}
+
+/**
+ * 检查当前是否为微信浏览器
+ * @returns {boolean} 是否在微信浏览器中
+ */
+export function isWechatBrowser() {
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.indexOf('micromessenger') !== -1;
+}
+
+/**
+ * 设置分享元数据
+ * @param {Object} options 分享选项
+ */
+export function setShareMetadata(options = {}) {
+  log('设置分享元数据:', options);
+  
+  const title = options.title || document.title || '点点够APP';
+  const subtitle = options.subtitle || getDefaultSubtitle();
+  const logo = options.logo || getDefaultLogo();
+  const url = options.url || window.location.href;
+  
+  try {
+    // 设置页面元数据
+    document.title = title;
+    
+    // 设置OpenGraph标签
+    let ogTitle = document.querySelector('meta[property="og:title"]');
+    if (!ogTitle) {
+      ogTitle = document.createElement('meta');
+      ogTitle.setAttribute('property', 'og:title');
+      document.head.appendChild(ogTitle);
+    }
+    ogTitle.setAttribute('content', title);
+    
+    let ogDescription = document.querySelector('meta[property="og:description"]');
+    if (!ogDescription) {
+      ogDescription = document.createElement('meta');
+      ogDescription.setAttribute('property', 'og:description');
+      document.head.appendChild(ogDescription);
+    }
+    ogDescription.setAttribute('content', subtitle);
+    
+    let ogImage = document.querySelector('meta[property="og:image"]');
+    if (!ogImage) {
+      ogImage = document.createElement('meta');
+      ogImage.setAttribute('property', 'og:image');
+      document.head.appendChild(ogImage);
+    }
+    ogImage.setAttribute('content', logo);
+    
+    let ogUrl = document.querySelector('meta[property="og:url"]');
+    if (!ogUrl) {
+      ogUrl = document.createElement('meta');
+      ogUrl.setAttribute('property', 'og:url');
+      document.head.appendChild(ogUrl);
+    }
+    ogUrl.setAttribute('content', url);
+  } catch (error) {
+    errorLog('设置页面元数据时出错:', error);
+  }
+}
+
+/**
+ * 配置微信分享
+ * @param {Object} options 分享选项
+ */
+export function configWechatShare(options = {}) {
+  log('配置微信分享:', options);
+  
+  if (!isWechatBrowser() || !window.wx) {
+    log('非微信环境或wx未加载');
+    return;
+  }
+  
+  try {
+    window.wx.ready(() => {
+      const shareOptions = {
+        title: options.title || document.title || '点点够',
+        desc: options.desc || getDefaultSubtitle(),
+        link: options.link || window.location.href,
+        imgUrl: options.imgUrl || getDefaultLogo()
+      };
+      
+      if (window.wx.updateAppMessageShareData) {
+        window.wx.updateAppMessageShareData(shareOptions);
+      }
+      
+      if (window.wx.updateTimelineShareData) {
+        window.wx.updateTimelineShareData(shareOptions);
+      }
+      
+      if (window.wx.onMenuShareAppMessage) {
+        window.wx.onMenuShareAppMessage(shareOptions);
+      }
+      
+      if (window.wx.onMenuShareTimeline) {
+        window.wx.onMenuShareTimeline(shareOptions);
+      }
+    });
+  } catch (error) {
+    errorLog('配置微信分享时出错:', error);
+  }
+}
+
+/**
+ * 分享到微信
+ * @param {Object} options 分享选项
+ */
+export function shareToWechat(options = {}) {
+  log('分享到微信:', options);
+  
+  setShareMetadata(options);
+  
+  if (isWechatBrowser()) {
+    configWechatShare({
+      title: options.title || document.title,
+      desc: options.subtitle || options.desc || getDefaultSubtitle(),
+      link: options.url || window.location.href,
+      imgUrl: options.logo || options.imgUrl || getDefaultLogo()
+    });
+  } else {
+    log('非微信环境，无法分享到微信');
+  }
+}
+
+/**
+ * 分享链接
+ * @param {string} url 要分享的URL
+ * @param {Function} callback 分享完成的回调
+ */
+export function shareLink(url, callback) {
+  const shareUrl = url || window.location.href;
+  
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(shareUrl)
+        .then(() => {
+          if (callback && typeof callback === 'function') {
+            callback(true);
+          }
+        })
+        .catch(error => {
+          errorLog('复制到剪贴板失败:', error);
+          fallbackCopy();
+        });
+    } else {
+      fallbackCopy();
+    }
+  } catch (error) {
+    errorLog('分享链接时出错:', error);
+    fallbackCopy();
+  }
+  
+  function fallbackCopy() {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = shareUrl;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = 0;
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      
+      const success = document.execCommand('copy');
+      if (callback && typeof callback === 'function') {
+        callback(success);
+      }
+      
+      document.body.removeChild(textarea);
+    } catch (error) {
+      errorLog('回退复制方法失败:', error);
+      if (callback && typeof callback === 'function') {
+        callback(false);
+      }
+    }
+  }
+}
+
+// 导出为默认对象
+export default {
+  isWechatBrowser,
+  setShareMetadata,
+  configWechatShare,
+  shareToWechat,
+  shareLink,
+  getDefaultLogo,
+  getDefaultSubtitle
+};

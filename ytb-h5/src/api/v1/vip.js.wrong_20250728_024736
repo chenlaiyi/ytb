@@ -1,0 +1,50 @@
+import request from '@/utils/request'
+
+/**
+ * VIP V1版本API接口 - 使用Laravel RESTful API
+ */
+
+/**
+ * 获取VIP团队信息
+ */
+export function getVipTeamInfoV1(params) {
+  console.log('🔧 调用VIP团队信息V1 API');
+  
+  const { silentError, ...requestParams } = params || {};
+  return request({
+    url: '/api/mobile/v1/vip/team-info',
+    method: 'post',
+    data: requestParams,
+    silentError: silentError
+  })
+}
+
+/**
+ * 获取VIP奖金池信息
+ */
+export function getVipPoolInfoV1(params) {
+  console.log('🔧 调用VIP奖金池信息V1 API');
+  
+  const { silentError, ...requestParams } = params || {};
+  return request({
+    url: '/api/mobile/v1/vip/pool-info',
+    method: 'post',
+    data: requestParams,
+    silentError: silentError
+  })
+}
+
+/**
+ * 获取VIP分红信息
+ */
+export function getVipDividendInfoV1(params) {
+  console.log('🔧 调用VIP分红信息V1 API');
+  
+  const { silentError, ...requestParams } = params || {};
+  return request({
+    url: '/api/mobile/v1/vip/dividend-info',
+    method: 'post',
+    data: requestParams,
+    silentError: silentError
+  })
+}

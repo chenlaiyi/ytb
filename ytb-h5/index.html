@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="format-detection" content="telephone=no,email=no,address=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#07c160" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <!-- 防止浏览器缓存，特别重要 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="description" content="点点够 - 让净水共享更便捷" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    
+    <!-- tapgo字体由 CSS 按需加载，移除预加载避免控制台警告 -->
+    
+    <title>亿拓宝</title>
+
+    <!-- 添加默认的OpenGraph元标签，用于分享 -->
+    <meta property="og:title" content="亿拓宝" />
+    <meta property="og:description" content="每天进步一点点，实现富而喜悦人生。" />
+    <meta property="og:image" content="https://pay.itapgo.com/images/logo.png?v=20250604" />
+    <meta property="og:url" content="https://pay.itapgo.com/app/" />
+    <meta property="og:type" content="website" />
+
+    <!-- 添加Twitter卡片元标签 -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="亿拓宝" />
+    <meta name="twitter:description" content="每天进步一点点，实现富而喜悦人生。" />
+    <meta name="twitter:image" content="https://pay.itapgo.com/images/logo.png?v=20250604" />
+
+    <!-- 弹窗样式修复 -->
+    <link rel="stylesheet" href="/css/popup-fix.css" />
+
+    <!-- 移动兼容性处理 -->
+    <script>
+      // 移动设备适配
+      (function() {
+        // 判断是否需要添加meta标签
+        var ua = navigator.userAgent;
+        var isIOS = /(iPhone|iPad|iPod)/i.test(ua);
+        var isAndroid = /Android/i.test(ua);
+        var isWeixin = /MicroMessenger/i.test(ua);
+
+        // 微信内置浏览器的适配
+        if (isWeixin) {
+          // 检测是否是iPhone X或以上的设备
+          if (isIOS && (window.screen.height >= 812 && window.screen.width >= 375)) {
+            document.documentElement.classList.add('safe-area');
+          }
+        }
+
+        // 防止页面缩放
+        document.addEventListener('touchstart', function(event) {
+          if (event.touches.length > 1) {
+            event.preventDefault();
+          }
+        }, { passive: false });
+
+        var lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+          var now = (new Date()).getTime();
+          if (now - lastTouchEnd <= 300) {
+            event.preventDefault();
+          }
+          lastTouchEnd = now;
+        }, false);
+      })();
+    </script>
+    <script>
+      (function () {
+        var candidate =
+          typeof globalThis !== 'undefined' ? globalThis :
+          typeof window !== 'undefined' ? window :
+          typeof self !== 'undefined' ? self :
+          typeof global !== 'undefined' ? global :
+          {};
+
+        if (typeof window !== 'undefined') {
+          if (typeof window.global === 'undefined') {
+            window.global = candidate;
+          }
+          if (typeof window.globalThis === 'undefined') {
+            try {
+              Object.defineProperty(window, 'globalThis', {
+                value: window,
+                configurable: true,
+                writable: true
+              });
+            } catch (err) {
+              window.globalThis = window;
+            }
+          }
+        }
+
+        var g = typeof globalThis !== 'undefined' ? globalThis :
+                typeof window !== 'undefined' ? window :
+                typeof self !== 'undefined' ? self :
+                candidate;
+
+        if (typeof g.global === 'undefined') {
+          g.global = g;
+        }
+
+        if (typeof g.globalThis === 'undefined') {
+          g.globalThis = g;
+        }
+
+        if (typeof g.fetch === 'undefined' && typeof window !== 'undefined' && window.fetch) {
+          g.fetch = window.fetch.bind(window);
+        }
+        if (typeof g.Request === 'undefined' && typeof window !== 'undefined' && window.Request) {
+          g.Request = window.Request;
+        }
+        if (typeof g.Response === 'undefined' && typeof window !== 'undefined' && window.Response) {
+          g.Response = window.Response;
+        }
+        if (typeof g.Headers === 'undefined' && typeof window !== 'undefined' && window.Headers) {
+          g.Headers = window.Headers;
+        }
+        if (typeof g.ReadableStream === 'undefined' && typeof window !== 'undefined' && window.ReadableStream) {
+          g.ReadableStream = window.ReadableStream;
+        }
+        if (typeof g.TextEncoder === 'undefined' && typeof window !== 'undefined' && window.TextEncoder) {
+          g.TextEncoder = window.TextEncoder;
+        }
+      })();
+    </script>
+    <!-- 兜底 globalThis/global 以兼容旧版微信 WebView -->
+    <script>
+      (function () {
+        var globalCandidate;
+
+        if (typeof globalThis === 'object') {
+          globalCandidate = globalThis;
+        } else {
+          try {
+            Object.defineProperty(Object.prototype, '__global_this_polyfill__', {
+              get: function () {
+                return this;
+              },
+              configurable: true
+            });
+            // 通过访问临时属性获取全局对象
+            globalCandidate = __global_this_polyfill__;
+            delete Object.prototype.__global_this_polyfill__;
+          } catch (err) {
+            globalCandidate =
+              typeof window !== 'undefined' ? window :
+              typeof self !== 'undefined' ? self :
+              typeof global !== 'undefined' ? global :
+              {};
+          }
+
+          if (globalCandidate && typeof globalCandidate.globalThis === 'undefined') {
+            try {
+              globalCandidate.globalThis = globalCandidate;
+            } catch (assignErr) {}
+          }
+        }
+
+        if (!globalCandidate) {
+          globalCandidate =
+            typeof window !== 'undefined' ? window :
+            typeof self !== 'undefined' ? self :
+            typeof global !== 'undefined' ? global :
+            {};
+        }
+
+        if (typeof globalCandidate.global === 'undefined') {
+          globalCandidate.global = globalCandidate;
+        }
+
+        if (typeof globalCandidate.window === 'undefined') {
+          globalCandidate.window = globalCandidate;
+        }
+
+        if (typeof globalCandidate.self === 'undefined') {
+          globalCandidate.self = globalCandidate;
+        }
+
+        if (typeof globalCandidate.globalThis === 'undefined') {
+          globalCandidate.globalThis = globalCandidate;
+        }
+      })();
+    </script>
+    <!-- 导入映射 -->
+    <!-- 全局引入 jQuery（axios 由应用内部挂载） -->
+    <script src="/js/jquery.min.js"></script>
+    
+    <script type="importmap">
+      {
+        "imports": {
+          "vue": "/app/js/vue.esm-browser.prod.js",
+          "vue-router": "/app/js/vue-router.esm-browser.js",
+          "pinia": "/app/js/pinia.esm-browser.js"
+        }
+      }
+    </script>
+    <!-- 错误处理和重定向脚本 -->
+    <script>
+      // 处理微信授权回调错误
+      (function() {
+        // 检查URL是否包含微信授权回调参数
+        var urlParams = new URLSearchParams(window.location.search);
+        var code = urlParams.get('code');
+        var state = urlParams.get('state');
+
+        if (code && state) {
+          // 如果在开发目录中
+          if (window.location.pathname.includes('/Tapp/app-vue/')) {
+            var redirectUrl = '/app/#/wechat-callback?code=' + code + '&state=' + state;
+            console.log('检测到开发环境下的微信回调，重定向到:', redirectUrl);
+            window.location.href = redirectUrl;
+          }
+        }
+
+        // 监听模块加载错误
+        window.addEventListener('error', function(event) {
+          if (event.message && event.message.includes('Failed to resolve module specifier')) {
+            console.error('模块解析错误:', event.message);
+            // 在微信回调场景下
+            if (code && state) {
+              var redirectUrl = '/app/#/wechat-callback?code=' + code + '&state=' + state;
+              console.log('检测到模块加载错误，重定向到:', redirectUrl);
+              window.location.href = redirectUrl;
+            }
+          }
+        }, true);
+      })();
+    </script>
+    <!-- 使用本地字体文件 -->
+    <style>
+      @font-face {
+        font-family: 'vant-icon';
+        src: url('/app/vant-icons/fonts/vant-icon.woff2') format('woff2'),
+            url('/app/vant-icons/fonts/vant-icon.woff') format('woff'),
+            url('/app/vant-icons/fonts/vant-icon.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      /* 确保图标字体正确应用 */
+      .van-icon {
+        font-family: 'vant-icon' !important;
+        font-style: normal !important;
+        font-weight: normal !important;
+        font-variant: normal !important;
+        text-transform: none !important;
+        line-height: 1 !important;
+        speak: none !important;
+        -webkit-font-smoothing: antialiased !important;
+        -moz-osx-font-smoothing: grayscale !important;
+      }
+
+      /* 修复可能的图标显示问题 */
+      .van-icon::before {
+        font-family: 'vant-icon' !important;
+      }
+
+      /* 修复底部导航栏和点击 */
+      .van-tabbar {
+        z-index: 9999 !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        background-color: #fff !important;
+        box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05) !important;
+      }
+
+      .van-tabbar-item {
+        touch-action: manipulation !important;
+        cursor: pointer !important;
+      }
+
+      /* 默认头像样式 - 避免加载外部资源 */
+      .avatar-fallback {
+        width: 76px;
+        height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #f2f3f5;
+        color: #909399;
+        font-size: 16px;
+        border-radius: 50%;
+        border: 3px solid rgba(255, 255, 255, 0.8);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+    <!-- 添加兼容性代码 -->
+    <script>
+      // 移动端适配
+      document.addEventListener('DOMContentLoaded', function() {
+        // 处理iOS底部导航适配
+        if (/iphone|ipod|ipad/i.test(navigator.userAgent)) {
+          document.documentElement.classList.add('ios');
+        }
+
+        // 添加全局点击处理
+        document.addEventListener('click', function(e) {
+          const tabbarItem = e.target.closest('.van-tabbar-item');
+          if (tabbarItem) {
+            // 模拟点击事件
+            const href = tabbarItem.getAttribute('href');
+            if (href) {
+              window.location.href = href;
+            }
+          }
+        });
+      });
+    </script>
+    <!-- 全局错误捕获 -->
+    <script>
+      // 捕获全局未处理的错误
+      window.addEventListener('error', function(event) {
+        // 过滤掉常见的非关键错误，避免误报
+        var message = event.message || '';
+        var filename = event.filename || '';
+        
+        // 忽略外部资源加载失败（如微信SDK）
+        if (filename.includes('res.wx.qq.com') || 
+            message.includes('res.wx.qq.com') ||
+            message.includes('Script error') ||
+            message.includes('Network Error') ||
+            message.includes('Loading CSS chunk')) {
+          console.warn('忽略外部资源错误:', message);
+          return;
+        }
+        
+        // 忽略分支机构相关的token错误，这些已经有专门处理
+        if (message.includes('无效的令牌') || 
+            message.includes('token') ||
+            window.location.hash.includes('/branch')) {
+          console.warn('忽略分支机构token相关错误:', message);
+          return;
+        }
+
+        // 记录其他错误信息
+        console.error('全局错误:', message, filename, 'line:', event.lineno, 'col:', event.colno);
+
+        // 特别关注与微信支付相关的错误
+        if (filename && (filename.includes('index-') || filename.includes('app.js'))) {
+          console.error('可能的应用程序错误:', event);
+
+          // 如果错误与微信支付有关
+          if (message && (
+              message.includes('WeixinJSBridge') ||
+              message.includes('getBrandWCPayRequest') ||
+              message.includes('pay')
+          )) {
+            console.error('检测到微信支付相关错误');
+            // 记录用户环境信息以便排查
+            console.info('用户浏览器:', navigator.userAgent);
+            console.info('页面URL:', window.location.href);
+          }
+        }
+      });
+
+      // 捕获Promise未处理的rejected错误
+      window.addEventListener('unhandledrejection', function(event) {
+        console.error('未处理的Promise错误:', event.reason);
+      });
+    </script>
+    <!-- 添加微信JS SDK支持 - 本地化版本 -->
+    <script>
+      if (/MicroMessenger/i.test(navigator.userAgent)) {
+        // 使用本地微信JS SDK，避免外网依赖
+        if (location.hostname === 'pay.itapgo.com') {
+          document.write('<script src="/app/js/jweixin-1.6.0.js"><\/script>');
+        } else {
+          // 开发环境或其他环境，尝试加载官方版本，但添加超时保护
+          var script = document.createElement('script');
+          script.src = 'https://res.wx.qq.com/open/js/jweixin-1.6.0.js';
+          script.async = true;
+          script.timeout = 3000; // 3秒超时
+          
+          // 超时处理
+          var timeoutId = setTimeout(function() {
+            console.warn('微信JS SDK加载超时，使用fallback处理');
+            // 创建一个简化的wx对象，避免报错
+            if (typeof wx === 'undefined') {
+              window.wx = {
+                config: function() {},
+                ready: function(callback) { 
+                  setTimeout(callback, 100); 
+                },
+                error: function() {},
+                chooseWXPay: function() {
+                  console.warn('微信支付功能不可用');
+                }
+              };
+            }
+          }, 3000);
+          
+          script.onload = function() {
+            clearTimeout(timeoutId);
+            console.log('微信JS SDK加载成功');
+          };
+          
+          script.onerror = function() {
+            clearTimeout(timeoutId);
+            console.warn('微信JS SDK加载失败，使用fallback处理');
+            // 创建fallback wx对象
+            if (typeof wx === 'undefined') {
+              window.wx = {
+                config: function() {},
+                ready: function(callback) { 
+                  setTimeout(callback, 100); 
+                },
+                error: function() {},
+                chooseWXPay: function() {
+                  console.warn('微信支付功能不可用');
+                }
+              };
+            }
+          };
+          
+          document.head.appendChild(script);
+        }
+      }
+    </script>
+
+    <!-- 微信支付桥接初始化 -->
+    <script>
+      // 在页面加载完成后检查WeixinJSBridge
+      document.addEventListener('DOMContentLoaded', function() {
+        // 在微信环境中才执行
+        if (/MicroMessenger/i.test(navigator.userAgent)) {
+          console.log('微信环境检测，准备WeixinJSBridge');
+
+          // 注册WeixinJSBridgeReady事件
+          if (typeof WeixinJSBridge === 'undefined') {
+            console.log('WeixinJSBridge未定义，注册ready事件');
+
+            function onBridgeReady() {
+              console.log('WeixinJSBridge已初始化');
+              // 将WeixinJSBridge挂载到window对象以确保可用
+              window.WeixinJSBridge = WeixinJSBridge;
+            }
+
+            if (document.addEventListener) {
+              document.addEventListener('WeixinJSBridgeReady', onBridgeReady, false);
+            } else if (document.attachEvent) {
+              document.attachEvent('WeixinJSBridgeReady', onBridgeReady);
+              document.attachEvent('onWeixinJSBridgeReady', onBridgeReady);
+            }
+          } else {
+            console.log('WeixinJSBridge已存在');
+            // 确保挂载到window对象
+            window.WeixinJSBridge = WeixinJSBridge;
+          }
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+    <!-- 微信调试弹窗关闭功能已集成在页面内联脚本中 -->
+  </body>
+</html>
