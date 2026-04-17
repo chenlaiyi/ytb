@@ -528,7 +528,7 @@ try {
                 $qiyunDeviceMap = [];
                 if (!empty($deviceNumbers)) {
                     $dp = implode(',', array_fill(0, count($deviceNumbers), '?'));
-                    $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model FROM qiyun_devices WHERE board_code IN ($dp)");
+                    $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, is_online FROM qiyun_devices WHERE board_code IN ($dp)");
                     try {
                         $qdStmt->execute(array_values($deviceNumbers));
                         while ($qd = $qdStmt->fetch(PDO::FETCH_ASSOC)) {
@@ -539,8 +539,9 @@ try {
 
                 foreach ($rawDevices as $d) {
                     $billing_mode = $d['billing_mode'] === '1' ? 'flow' : 'duration';
-                    $is_online = $d['network_status'] === '1';
                     $qd = $qiyunDeviceMap[$d['device_number']] ?? [];
+                    // 优先使用 qiyun_devices 的实时在线状态，如果没有才回退到 tapp_devices
+                    $is_online = isset($qd['is_online']) ? (bool)$qd['is_online'] : ($d['network_status'] === '1');
 
                     $devices[] = [
                         'id' => (int)$d['id'],
