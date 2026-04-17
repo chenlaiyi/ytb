@@ -481,6 +481,10 @@ try {
             exit;
         }
 
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
+        $offset = ($page - 1) * $perPage;
+
         $devices = [];
         $total = 0;
 
@@ -508,58 +512,43 @@ try {
             if (!empty($appUserIds)) {
                 $placeholders = implode(',', array_fill(0, count($appUserIds), '?'));
 
-                // 查询绑定的净水器设备
-                $countStmt = $tappDb->prepare("SELECT COUNT(*) FROM app_user_purifier_devices WHERE user_id IN ($placeholders)");
+                // 查询 tapp_devices
+                $countStmt = $tappDb->prepare("SELECT COUNT(*) FROM tapp_devices WHERE app_user_id IN ($placeholders)");
                 $countStmt->execute($appUserIds);
                 $total = (int)$countStmt->fetchColumn();
 
-                $listStmt = $tappDb->prepare("SELECT * FROM app_user_purifier_devices WHERE user_id IN ($placeholders) ORDER BY bind_time DESC");
-                $listStmt->execute($appUserIds);
+                $offsetInt = (int)$offset;
+                $perPageInt = (int)$perPage;
+                $sql = "SELECT * FROM tapp_devices WHERE app_user_id IN ($placeholders) ORDER BY create_date DESC LIMIT {$offsetInt}, {$perPageInt}";
+                $listStmt = $tappDb->prepare($sql);
+                $listStmt->execute(array_values($appUserIds));
                 $rawDevices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
 
-                // 尝试从 water_devices 表获取更详细的设备信息
-                $deviceIds = array_filter(array_map(function($d) { return $d['device_id'] ?? ''; }, $rawDevices));
-                $waterDeviceMap = [];
-                if (!empty($deviceIds)) {
-                    $dp = implode(',', array_fill(0, count($deviceIds), '?'));
-                    $wdStmt = $tappDb->prepare("SELECT * FROM water_devices WHERE device_number IN ($dp) OR id IN ($dp)");
-                    $wdParams = array_merge(array_values($deviceIds), array_values($deviceIds));
-                    try {
-                        $wdStmt->execute($wdParams);
-                        while ($wd = $wdStmt->fetch(PDO::FETCH_ASSOC)) {
-                            $waterDeviceMap[$wd['device_number']] = $wd;
-                            $waterDeviceMap[$wd['id']] = $wd;
-                        }
-                    } catch (Exception $e) {
-                        // water_devices 表可能不匹配，忽略
-                    }
-                }
-
                 foreach ($rawDevices as $d) {
-                    $wd = $waterDeviceMap[$d['device_id']] ?? [];
-                    $deviceInfo = json_decode($d['device_info'] ?? '{}', true) ?: [];
+                    $billing_mode = $d['billing_mode'] === '1' ? 'flow' : 'duration';
+                    $is_online = $d['network_status'] === '1';
 
                     $devices[] = [
                         'id' => (int)$d['id'],
-                        'device_id' => $d['device_id'] ?? '',
-                        'device_name' => $d['device_name'] ?? '',
-                        'device_model' => $d['device_model'] ?? ($wd['device_type'] ?? ''),
-                        'brand' => $deviceInfo['brand'] ?? ($wd['device_type'] ?? '净水器'),
-                        'board_code' => $d['device_id'] ?? ($wd['device_number'] ?? ''),
-                        'sn' => $d['device_id'] ?? '',
-                        'install_location' => $d['install_location'] ?? ($wd['address'] ?? ''),
-                        'address' => $d['install_location'] ?? ($wd['address'] ?? ''),
-                        'is_primary' => (int)($d['is_primary'] ?? 0),
-                        'billing_mode' => $wd['billing_mode'] ?? 'flow',
-                        'surplus_flow' => (float)($wd['surplus_flow'] ?? 0),
-                        'remaining_days' => (int)($wd['remaining_days'] ?? 0),
-                        'is_online' => ($wd['network_status'] ?? '') === 'online' || ($wd['device_status'] ?? '') === 'online',
-                        'network_status' => $wd['network_status'] ?? 'unknown',
-                        'bind_time' => $d['bind_time'] ?? $d['created_at'] ?? '',
-                        'activate_date' => $wd['activate_date'] ?? '',
-                        'filter_life' => (int)($deviceInfo['filter_life'] ?? 100),
-                        'product_image' => $deviceInfo['product_image'] ?? '',
-                        'created_at' => $d['created_at'] ?? '',
+                        'device_id' => $d['device_id'] ?? $d['device_number'] ?? '',
+                        'device_name' => '净水器-' . ($d['device_number'] ?? ''),
+                        'device_model' => $d['device_type'] ?? '',
+                        'brand' => '净水器',
+                        'board_code' => $d['device_number'] ?? '',
+                        'sn' => $d['device_number'] ?? '',
+                        'install_location' => $d['client_address'] ?? $d['address'] ?? '',
+                        'address' => $d['client_address'] ?? $d['address'] ?? '',
+                        'is_primary' => (int)($d['is_self_use'] ?? 0),
+                        'billing_mode' => $billing_mode,
+                        'surplus_flow' => (float)($d['surplus_flow'] ?? 0),
+                        'remaining_days' => (int)($d['remaining_days'] ?? 0),
+                        'is_online' => $is_online,
+                        'network_status' => $is_online ? 'online' : 'offline',
+                        'bind_time' => $d['activate_date'] ?? $d['create_date'] ?? '',
+                        'activate_date' => $d['activate_date'] ?? '',
+                        'filter_life' => 100, // 这里没有获取滤芯寿命
+                        'product_image' => '',
+                        'created_at' => $d['create_date'] ?? $d['created_at'] ?? '',
                     ];
                 }
             }
@@ -609,8 +598,8 @@ try {
             'data' => [
                 'list' => $devices,
                 'total' => $total > 0 ? $total : count($devices),
-                'page' => 1,
-                'per_page' => 50,
+                'page' => $page,
+                'per_page' => $perPage,
             ]
         ], JSON_UNESCAPED_UNICODE);
         exit;
