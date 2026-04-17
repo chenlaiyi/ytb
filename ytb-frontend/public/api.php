@@ -505,6 +505,11 @@ try {
                 
                 $is_online = isset($qd['is_online']) ? (bool)$qd['is_online'] : ($d['network_status'] === '1');
 
+                $fl1 = $d['f1_flux_max'] > 0 ? max(0, min(100, round((1 - $d['f1_flux'] / $d['f1_flux_max']) * 100))) : 100;
+                $fl2 = $d['f2_flux_max'] > 0 ? max(0, min(100, round((1 - $d['f2_flux'] / $d['f2_flux_max']) * 100))) : 100;
+                $fl3 = $d['f3_flux_max'] > 0 ? max(0, min(100, round((1 - $d['f3_flux'] / $d['f3_flux_max']) * 100))) : 100;
+                $fl4 = $d['f4_flux_max'] > 0 ? max(0, min(100, round((1 - $d['f4_flux'] / $d['f4_flux_max']) * 100))) : 100;
+
                 $deviceData = [
                     'id' => (int)$d['id'],
                     'device_id' => $d['device_id'] ?? $d['device_number'] ?? '',
@@ -515,23 +520,36 @@ try {
                     'sn' => $d['device_number'] ?? '',
                     'install_location' => $d['client_address'] ?? $d['address'] ?? '',
                     'address' => $d['client_address'] ?? $d['address'] ?? '',
+                    'contact_name' => $d['client_name'] ?? $d['app_user_name'] ?? '',
+                    'contact_phone' => $d['client_phone'] ?? '',
+                    'imei' => $d['imei'] ?? '',
+                    'iccid' => $d['iccid'] ?? '',
                     'is_primary' => (int)($d['is_self_use'] ?? 0),
                     'billing_mode' => $billing_mode,
                     'surplus_flow' => (float)($d['surplus_flow'] ?? 0),
                     'remaining_days' => (int)($d['remaining_days'] ?? 0),
+                    'total_water' => (float)($d['cumulative_filtration_flow'] ?? 0),
+                    'today_water' => 0,
+                    'month_water' => 0,
                     'is_online' => $is_online,
                     'network_status' => $is_online ? 'online' : 'offline',
                     'is_power_on' => $is_online,
                     'has_fault' => false,
+                    'is_activated' => !empty($d['activate_date']),
+                    'raw_water_value' => (float)($d['raw_water_value'] ?? 0),
+                    'purification_water_value' => (float)($d['purification_water_value'] ?? 0),
+                    'signal_intensity' => $d['signal_intensity'] ?? 0,
+                    'service_end_date' => $d['service_end_time'] ?? '',
+                    'last_online_at' => $d['last_sync_time'] ?? '',
+                    'used_days' => !empty($d['activate_date']) ? floor((time() - strtotime($d['activate_date'])) / 86400) : 0,
                     'bind_time' => $d['activate_date'] ?? $d['create_date'] ?? '',
                     'activate_date' => $d['activate_date'] ?? '',
-                    'filter_life' => 100, 
                     'filters' => [
-                       ['name' => 'PP棉滤芯', 'life' => 100],
-                       ['name' => '前置活性炭', 'life' => 100],
-                       ['name' => 'RO反渗透', 'life' => 100],
-                       ['name' => '后置活性炭', 'life' => 100]
-                    ], // 模拟 4 根滤芯的满状态
+                       ['name' => 'PP棉滤芯', 'life' => $fl1],
+                       ['name' => '前置活性炭', 'life' => $fl2],
+                       ['name' => 'RO反渗透', 'life' => $fl3],
+                       ['name' => '后置活性炭', 'life' => $fl4]
+                    ],
                     'product_image' => '',
                     'created_at' => $d['create_date'] ?? $d['created_at'] ?? '',
                 ];
