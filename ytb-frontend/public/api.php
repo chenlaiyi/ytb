@@ -505,51 +505,55 @@ try {
         $deviceId = $matches[1];
 
         try {
-            $tappDb = getTappDB();
-            
-            // 尝试从 tapp_devices 查询单条
-            $stmt = $tappDb->prepare("SELECT * FROM tapp_devices WHERE id = ? LIMIT 1");
+            // ---- CHANGED TO QUERY from YTB DEVICES ----
+            $stmt = $db->prepare("SELECT * FROM ytb_devices WHERE id = ? LIMIT 1");
             $stmt->execute([$deviceId]);
             $d = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($d) {
-                $billing_mode = $d['billing_mode'] === '1' ? 'flow' : 'duration';
+                $billing_mode = $d['billing_mode'] === 'flow' ? 'flow' : 'duration';
                 
-                // 查 qiyun_devices 获取实时状态、品牌、型号
+                $tappDb = getTappDB();
+                // 获取附加数据
                 $deviceNumber = $d['device_number'] ?? '';
                 $qd = [];
+                $td = [];
                 if ($deviceNumber) {
                     $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, is_online FROM qiyun_devices WHERE board_code = ? LIMIT 1");
                     $qdStmt->execute([$deviceNumber]);
                     $qd = $qdStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                    
+                    $tdStmt = $tappDb->prepare("SELECT * FROM tapp_devices WHERE device_number = ? LIMIT 1");
+                    $tdStmt->execute([$deviceNumber]);
+                    $td = $tdStmt->fetch(PDO::FETCH_ASSOC) ?: [];
                 }
                 
                 $is_online = isset($qd['is_online']) ? (bool)$qd['is_online'] : ($d['network_status'] === '1');
 
-                $fl1 = $d['f1_flux_max'] > 0 ? max(0, min(100, round((1 - $d['f1_flux'] / $d['f1_flux_max']) * 100))) : 100;
-                $fl2 = $d['f2_flux_max'] > 0 ? max(0, min(100, round((1 - $d['f2_flux'] / $d['f2_flux_max']) * 100))) : 100;
-                $fl3 = $d['f3_flux_max'] > 0 ? max(0, min(100, round((1 - $d['f3_flux'] / $d['f3_flux_max']) * 100))) : 100;
-                $fl4 = $d['f4_flux_max'] > 0 ? max(0, min(100, round((1 - $d['f4_flux'] / $d['f4_flux_max']) * 100))) : 100;
+                $fl1 = !empty($td['f1_flux_max']) && $td['f1_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f1_flux']??0) / $td['f1_flux_max']) * 100))) : 100;
+                $fl2 = !empty($td['f2_flux_max']) && $td['f2_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f2_flux']??0) / $td['f2_flux_max']) * 100))) : 100;
+                $fl3 = !empty($td['f3_flux_max']) && $td['f3_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f3_flux']??0) / $td['f3_flux_max']) * 100))) : 100;
+                $fl4 = !empty($td['f4_flux_max']) && $td['f4_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f4_flux']??0) / $td['f4_flux_max']) * 100))) : 100;
 
                 $deviceData = [
                     'id' => (int)$d['id'],
-                    'device_id' => $d['device_id'] ?? $d['device_number'] ?? '',
+                    'device_id' => $d['device_number'] ?? '',
                     'device_name' => '净水器-' . ($d['device_number'] ?? ''),
-                    'device_model' => $qd['device_model'] ?? $d['device_type'] ?? '',
-                    'brand' => $qd['brand'] ?? '净水器',
+                    'device_model' => $qd['device_model'] ?? $d['device_model'] ?? '净水器',
+                    'brand' => $qd['brand'] ?? $d['brand'] ?? '净水器',
                     'board_code' => $d['device_number'] ?? '',
                     'sn' => $d['device_number'] ?? '',
-                    'install_location' => formatDeviceAddress($d['client_address'] ?? $d['address'] ?? ''),
-                    'address' => formatDeviceAddress($d['client_address'] ?? $d['address'] ?? ''),
-                    'contact_name' => $d['client_name'] ?? $d['app_user_name'] ?? '',
+                    'install_location' => formatDeviceAddress($d['client_address'] ?? ''),
+                    'address' => formatDeviceAddress($d['client_address'] ?? ''),
+                    'contact_name' => $d['client_name'] ?? '',
                     'contact_phone' => $d['client_phone'] ?? '',
                     'imei' => $d['imei'] ?? '',
                     'iccid' => $d['iccid'] ?? '',
-                    'is_primary' => (int)($d['is_self_use'] ?? 0),
+                    'is_primary' => 1,
                     'billing_mode' => $billing_mode,
                     'surplus_flow' => (float)($d['surplus_flow'] ?? 0),
-                    'remaining_days' => (int)($d['remaining_days'] ?? 0),
-                    'total_water' => (float)($d['cumulative_filtration_flow'] ?? 0),
+                    'remaining_days' => 0,
+                    'total_water' => (float)($d['cumulative_flow'] ?? 0),
                     'today_water' => 0,
                     'month_water' => 0,
                     'is_online' => $is_online,
@@ -557,11 +561,11 @@ try {
                     'is_power_on' => $is_online,
                     'has_fault' => false,
                     'is_activated' => !empty($d['activate_date']),
-                    'raw_water_value' => (float)($d['raw_water_value'] ?? 0),
-                    'purification_water_value' => (float)($d['purification_water_value'] ?? 0),
-                    'signal_intensity' => $d['signal_intensity'] ?? 0,
-                    'service_end_date' => $d['service_end_time'] ?? '',
-                    'last_online_at' => $d['last_sync_time'] ?? '',
+                    'raw_water_value' => (float)($d['raw_water_tds'] ?? 0),
+                    'purification_water_value' => (float)($d['pure_water_tds'] ?? 0),
+                    'signal_intensity' => $d['signal_strength'] ?? 0,
+                    'service_end_date' => $d['service_end_date'] ?? '',
+                    'last_online_at' => $td['last_sync_time'] ?? '',
                     'used_days' => !empty($d['activate_date']) ? floor((time() - strtotime($d['activate_date'])) / 86400) : 0,
                     'bind_time' => $d['activate_date'] ?? $d['create_date'] ?? '',
                     'activate_date' => $d['activate_date'] ?? '',
@@ -572,7 +576,7 @@ try {
                        ['name' => '后置活性炭', 'life' => $fl4]
                     ],
                     'product_image' => '',
-                    'created_at' => $d['create_date'] ?? $d['created_at'] ?? '',
+                    'created_at' => $d['create_date'] ?? $d['activate_date'] ?? '',
                 ];
                 
                 echo json_encode([
@@ -610,40 +614,19 @@ try {
         $total = 0;
 
         try {
-            $tappDb = getTappDB();
+            $stmtCount = $db->prepare('SELECT COUNT(*) FROM ytb_devices WHERE client_phone = ?');
+            $stmtCount->execute([$user['phone']]);
+            $total = (int)$stmtCount->fetchColumn();
 
-            // 通过 phone 或 openid 在 ddg.app 找到对应的 app_users
-            $appUserIds = [];
-            if (!empty($user['phone'])) {
-                $stmt = $tappDb->prepare('SELECT id FROM app_users WHERE phone = ? LIMIT 5');
-                $stmt->execute([$user['phone']]);
-                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $appUserIds[] = (int)$row['id'];
-                }
-            }
+            $offsetInt = (int)$offset;
+            $perPageInt = (int)$perPage;
+            $sql = "SELECT * FROM ytb_devices WHERE client_phone = ? ORDER BY create_date DESC LIMIT {$offsetInt}, {$perPageInt}";
+            $listStmt = $db->prepare($sql);
+            $listStmt->execute([$user['phone']]);
+            $rawDevices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            if (empty($appUserIds) && !empty($user['openid'])) {
-                $stmt = $tappDb->prepare("SELECT id FROM app_users WHERE openid = ? LIMIT 5");
-                $stmt->execute([$user['openid']]);
-                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $appUserIds[] = (int)$row['id'];
-                }
-            }
-
-            if (!empty($appUserIds)) {
-                $placeholders = implode(',', array_fill(0, count($appUserIds), '?'));
-
-                // 查询 tapp_devices
-                $countStmt = $tappDb->prepare("SELECT COUNT(*) FROM tapp_devices WHERE app_user_id IN ($placeholders)");
-                $countStmt->execute($appUserIds);
-                $total = (int)$countStmt->fetchColumn();
-
-                $offsetInt = (int)$offset;
-                $perPageInt = (int)$perPage;
-                $sql = "SELECT * FROM tapp_devices WHERE app_user_id IN ($placeholders) ORDER BY create_date DESC LIMIT {$offsetInt}, {$perPageInt}";
-                $listStmt = $tappDb->prepare($sql);
-                $listStmt->execute(array_values($appUserIds));
-                $rawDevices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+            if (!empty($rawDevices)) {
+                $tappDb = getTappDB();
 
                 $deviceNumbers = array_filter(array_column($rawDevices, 'device_number'));
                 $qiyunDeviceMap = [];
