@@ -472,6 +472,27 @@ try {
         exit;
     }
 
+    // 格式化设备含有18位省市县行政区划代码的地址
+    function formatDeviceAddress($rawAddress) {
+        if (!$rawAddress) return '';
+        if (preg_match('/^(\d{6})(\d{6})(\d{6})(.*)$/', $rawAddress, $matches)) {
+            static $areaMap = null;
+            if ($areaMap === null) {
+                $jsonFile = __DIR__ . '/area_map.json';
+                if (file_exists($jsonFile)) {
+                    $areaMap = json_decode(file_get_contents($jsonFile), true) ?: [];
+                } else {
+                    $areaMap = [];
+                }
+            }
+            $p = $areaMap[$matches[1]] ?? '';
+            $c = $areaMap[$matches[2]] ?? '';
+            $a = $areaMap[$matches[3]] ?? '';
+            return trim($p . $c . $a . $matches[4]);
+        }
+        return $rawAddress;
+    }
+
     // YTB 获取设备详情
     if (preg_match('#^ytb/devices/(\w+)$#', $path, $matches) && $method === 'GET') {
         $user = authenticateYtbUser($db, $token);
@@ -518,8 +539,8 @@ try {
                     'brand' => $qd['brand'] ?? '净水器',
                     'board_code' => $d['device_number'] ?? '',
                     'sn' => $d['device_number'] ?? '',
-                    'install_location' => $d['client_address'] ?? $d['address'] ?? '',
-                    'address' => $d['client_address'] ?? $d['address'] ?? '',
+                    'install_location' => formatDeviceAddress($d['client_address'] ?? $d['address'] ?? ''),
+                    'address' => formatDeviceAddress($d['client_address'] ?? $d['address'] ?? ''),
                     'contact_name' => $d['client_name'] ?? $d['app_user_name'] ?? '',
                     'contact_phone' => $d['client_phone'] ?? '',
                     'imei' => $d['imei'] ?? '',
@@ -651,8 +672,8 @@ try {
                         'brand' => $qd['brand'] ?? '净水器',
                         'board_code' => $d['device_number'] ?? '',
                         'sn' => $d['device_number'] ?? '',
-                        'install_location' => $d['client_address'] ?? $d['address'] ?? '',
-                        'address' => $d['client_address'] ?? $d['address'] ?? '',
+                        'install_location' => formatDeviceAddress($d['client_address'] ?? $d['address'] ?? ''),
+                        'address' => formatDeviceAddress($d['client_address'] ?? $d['address'] ?? ''),
                         'is_primary' => (int)($d['is_self_use'] ?? 0),
                         'billing_mode' => $billing_mode,
                         'surplus_flow' => (float)($d['surplus_flow'] ?? 0),
