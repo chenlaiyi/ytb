@@ -524,16 +524,30 @@ try {
                 $listStmt->execute(array_values($appUserIds));
                 $rawDevices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
 
+                $deviceNumbers = array_filter(array_column($rawDevices, 'device_number'));
+                $qiyunDeviceMap = [];
+                if (!empty($deviceNumbers)) {
+                    $dp = implode(',', array_fill(0, count($deviceNumbers), '?'));
+                    $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model FROM qiyun_devices WHERE board_code IN ($dp)");
+                    try {
+                        $qdStmt->execute(array_values($deviceNumbers));
+                        while ($qd = $qdStmt->fetch(PDO::FETCH_ASSOC)) {
+                            $qiyunDeviceMap[$qd['board_code']] = $qd;
+                        }
+                    } catch (Exception $e) {}
+                }
+
                 foreach ($rawDevices as $d) {
                     $billing_mode = $d['billing_mode'] === '1' ? 'flow' : 'duration';
                     $is_online = $d['network_status'] === '1';
+                    $qd = $qiyunDeviceMap[$d['device_number']] ?? [];
 
                     $devices[] = [
                         'id' => (int)$d['id'],
                         'device_id' => $d['device_id'] ?? $d['device_number'] ?? '',
                         'device_name' => '净水器-' . ($d['device_number'] ?? ''),
-                        'device_model' => $d['device_type'] ?? '',
-                        'brand' => '净水器',
+                        'device_model' => $qd['device_model'] ?? $d['device_type'] ?? '',
+                        'brand' => $qd['brand'] ?? '净水器',
                         'board_code' => $d['device_number'] ?? '',
                         'sn' => $d['device_number'] ?? '',
                         'install_location' => $d['client_address'] ?? $d['address'] ?? '',
