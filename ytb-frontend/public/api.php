@@ -616,15 +616,16 @@ try {
         $total = 0;
 
         try {
-            // 直接从 ytb_devices 查询（唯一数据源）
-            $countStmt = $db->prepare('SELECT COUNT(*) FROM ytb_devices');
-            $countStmt->execute();
+            // 直接从 ytb_devices 查询当前用户绑定的设备
+            $userId = (int)$user['id'];
+            $countStmt = $db->prepare('SELECT COUNT(*) FROM ytb_devices WHERE ytb_user_id = ?');
+            $countStmt->execute([$userId]);
             $total = (int)$countStmt->fetchColumn();
 
             $offsetInt = (int)$offset;
             $perPageInt = (int)$perPage;
-            $listStmt = $db->prepare("SELECT * FROM ytb_devices ORDER BY create_date DESC LIMIT {$perPageInt} OFFSET {$offsetInt}");
-            $listStmt->execute();
+            $listStmt = $db->prepare("SELECT * FROM ytb_devices WHERE ytb_user_id = ? ORDER BY create_date DESC LIMIT {$perPageInt} OFFSET {$offsetInt}");
+            $listStmt->execute([$userId]);
             $rawDevices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // 从 qiyun_devices 获取实时在线状态
