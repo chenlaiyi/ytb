@@ -1383,7 +1383,18 @@ try {
         $todayRevenue = (float)$stmt->fetch(PDO::FETCH_ASSOC)['today'] ?? 0;
 
         $totalDevices = (int)$db->query("SELECT COUNT(*) FROM ytb_devices")->fetchColumn();
-        $onlineDevices = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE network_status = '1'")->fetchColumn();
+        // 通过心跳时间判断在线设备数（5分钟内有心跳视为在线）
+        $onlineDevices = 0;
+        try {
+            $tappDb = getTappDB();
+            $allDevNums = $db->query("SELECT device_number FROM ytb_devices")->fetchAll(PDO::FETCH_COLUMN);
+            if (!empty($allDevNums)) {
+                $dp = implode(',', array_fill(0, count($allDevNums), '?'));
+                $qdStmt = $tappDb->prepare("SELECT COUNT(*) FROM qiyun_devices WHERE board_code IN ($dp) AND last_sync_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)");
+                $qdStmt->execute($allDevNums);
+                $onlineDevices = (int)$qdStmt->fetchColumn();
+            }
+        } catch (Exception $e) {}
         $onlineRate = $totalDevices > 0 ? round($onlineDevices / $totalDevices * 100, 1) : 0;
 
         echo json_encode([
