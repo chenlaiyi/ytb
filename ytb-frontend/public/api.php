@@ -520,7 +520,7 @@ try {
                 if ($deviceNumber) {
                     try {
                         $tappDb = getTappDB();
-                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, is_online FROM qiyun_devices WHERE board_code = ? LIMIT 1");
+                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, last_sync_at FROM qiyun_devices WHERE board_code = ? LIMIT 1");
                         $qdStmt->execute([$deviceNumber]);
                         $qd = $qdStmt->fetch(PDO::FETCH_ASSOC) ?: [];
                         
@@ -530,7 +530,11 @@ try {
                     } catch (Exception $e) {}
                 }
                 
-                $is_online = isset($qd['is_online']) ? (bool)$qd['is_online'] : ($d['network_status'] === '1');
+                // 通过心跳时间判断在线：last_sync_at 在5分钟内视为在线
+                $is_online = false;
+                if (!empty($qd['last_sync_at'])) {
+                    $is_online = (time() - strtotime($qd['last_sync_at'])) < 300;
+                }
 
                 $fl1 = !empty($td['f1_flux_max']) && $td['f1_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f1_flux']??0) / $td['f1_flux_max']) * 100))) : 100;
                 $fl2 = !empty($td['f2_flux_max']) && $td['f2_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f2_flux']??0) / $td['f2_flux_max']) * 100))) : 100;
@@ -636,7 +640,7 @@ try {
                     try {
                         $tappDb = getTappDB();
                         $dp = implode(',', array_fill(0, count($deviceNumbers), '?'));
-                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, is_online FROM qiyun_devices WHERE board_code IN ($dp)");
+                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, last_sync_at FROM qiyun_devices WHERE board_code IN ($dp)");
                         $qdStmt->execute(array_values($deviceNumbers));
                         while ($qd = $qdStmt->fetch(PDO::FETCH_ASSOC)) {
                             $qiyunDeviceMap[$qd['board_code']] = $qd;
@@ -648,7 +652,11 @@ try {
             foreach ($rawDevices as $d) {
                 $billing_mode = strtolower($d['billing_mode'] ?? '') === 'flow' ? 'flow' : 'duration';
                 $qd = $qiyunDeviceMap[$d['device_number']] ?? [];
-                $is_online = isset($qd['is_online']) ? (bool)$qd['is_online'] : ($d['network_status'] === '1');
+                // 通过心跳时间判断在线：last_sync_at 在5分钟内视为在线
+                $is_online = false;
+                if (!empty($qd['last_sync_at'])) {
+                    $is_online = (time() - strtotime($qd['last_sync_at'])) < 300;
+                }
 
                 $devices[] = [
                     'id' => (int)$d['id'],
