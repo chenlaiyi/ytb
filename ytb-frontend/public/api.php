@@ -480,20 +480,124 @@ try {
             echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        // 查询用户关联的净水器设备
-        $page = max(1, (int)($_GET['page'] ?? 1));
-        $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
-        $offset = ($page - 1) * $perPage;
 
-        // 尝试查水机安装记录
+        $devices = [];
+        $total = 0;
+
         try {
-            $countStmt = $db->prepare('SELECT COUNT(*) FROM ytb_water_installations WHERE promoter_id = ?');
-            $countStmt->execute([$user['id']]);
-            $total = (int)$countStmt->fetchColumn();
+            $tappDb = getTappDB();
 
-            $listStmt = $db->prepare('SELECT * FROM ytb_water_installations WHERE promoter_id = ? ORDER BY created_at DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset);
-            $listStmt->execute([$user['id']]);
-            $devices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+            // 通过 phone 或 openid 在 ddg.app 找到对应的 app_users
+            $appUserIds = [];
+            if (!empty($user['phone'])) {
+                $stmt = $tappDb->prepare('SELECT id FROM app_users WHERE phone = ? LIMIT 5');
+                $stmt->execute([$user['phone']]);
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $appUserIds[] = (int)$row['id'];
+                }
+            }
+
+            if (empty($appUserIds) && !empty($user['openid'])) {
+                $stmt = $tappDb->prepare("SELECT id FROM app_users WHERE openid = ? LIMIT 5");
+                $stmt->execute([$user['openid']]);
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $appUserIds[] = (int)$row['id'];
+                }
+            }
+
+            if (!empty($appUserIds)) {
+                $placeholders = implode(',', array_fill(0, count($appUserIds), '?'));
+
+                // 查询绑定的净水器设备
+                $countStmt = $tappDb->prepare("SELECT COUNT(*) FROM app_user_purifier_devices WHERE user_id IN ($placeholders)");
+                $countStmt->execute($appUserIds);
+                $total = (int)$countStmt->fetchColumn();
+
+                $listStmt = $tappDb->prepare("SELECT * FROM app_user_purifier_devices WHERE user_id IN ($placeholders) ORDER BY bind_time DESC");
+                $listStmt->execute($appUserIds);
+                $rawDevices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                // 尝试从 water_devices 表获取更详细的设备信息
+                $deviceIds = array_filter(array_map(function($d) { return $d['device_id'] ?? ''; }, $rawDevices));
+                $waterDeviceMap = [];
+                if (!empty($deviceIds)) {
+                    $dp = implode(',', array_fill(0, count($deviceIds), '?'));
+                    $wdStmt = $tappDb->prepare("SELECT * FROM water_devices WHERE device_number IN ($dp) OR id IN ($dp)");
+                    $wdParams = array_merge(array_values($deviceIds), array_values($deviceIds));
+                    try {
+                        $wdStmt->execute($wdParams);
+                        while ($wd = $wdStmt->fetch(PDO::FETCH_ASSOC)) {
+                            $waterDeviceMap[$wd['device_number']] = $wd;
+                            $waterDeviceMap[$wd['id']] = $wd;
+                        }
+                    } catch (Exception $e) {
+                        // water_devices 表可能不匹配，忽略
+                    }
+                }
+
+                foreach ($rawDevices as $d) {
+                    $wd = $waterDeviceMap[$d['device_id']] ?? [];
+                    $deviceInfo = json_decode($d['device_info'] ?? '{}', true) ?: [];
+
+                    $devices[] = [
+                        'id' => (int)$d['id'],
+                        'device_id' => $d['device_id'] ?? '',
+                        'device_name' => $d['device_name'] ?? '',
+                        'device_model' => $d['device_model'] ?? ($wd['device_type'] ?? ''),
+                        'brand' => $deviceInfo['brand'] ?? ($wd['device_type'] ?? '净水器'),
+                        'board_code' => $d['device_id'] ?? ($wd['device_number'] ?? ''),
+                        'sn' => $d['device_id'] ?? '',
+                        'install_location' => $d['install_location'] ?? ($wd['address'] ?? ''),
+                        'address' => $d['install_location'] ?? ($wd['address'] ?? ''),
+                        'is_primary' => (int)($d['is_primary'] ?? 0),
+                        'billing_mode' => $wd['billing_mode'] ?? 'flow',
+                        'surplus_flow' => (float)($wd['surplus_flow'] ?? 0),
+                        'remaining_days' => (int)($wd['remaining_days'] ?? 0),
+                        'is_online' => ($wd['network_status'] ?? '') === 'online' || ($wd['device_status'] ?? '') === 'online',
+                        'network_status' => $wd['network_status'] ?? 'unknown',
+                        'bind_time' => $d['bind_time'] ?? $d['created_at'] ?? '',
+                        'activate_date' => $wd['activate_date'] ?? '',
+                        'filter_life' => (int)($deviceInfo['filter_life'] ?? 100),
+                        'product_image' => $deviceInfo['product_image'] ?? '',
+                        'created_at' => $d['created_at'] ?? '',
+                    ];
+                }
+            }
+
+            // 如果 app_user_purifier_devices 没数据，回退查 ytb_water_installations
+            if (empty($devices)) {
+                $countStmt = $db->prepare('SELECT COUNT(*) FROM ytb_water_installations WHERE promoter_id = ?');
+                $countStmt->execute([$user['id']]);
+                $total = (int)$countStmt->fetchColumn();
+
+                if ($total > 0) {
+                    $listStmt = $db->prepare('SELECT * FROM ytb_water_installations WHERE promoter_id = ? ORDER BY created_at DESC');
+                    $listStmt->execute([$user['id']]);
+                    $installations = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($installations as $inst) {
+                        $devices[] = [
+                            'id' => (int)$inst['id'],
+                            'device_id' => $inst['device_id'] ?? $inst['device_number'] ?? '',
+                            'device_name' => '净水器-' . ($inst['device_number'] ?? ''),
+                            'device_model' => '',
+                            'brand' => '净水器',
+                            'board_code' => $inst['device_number'] ?? '',
+                            'sn' => $inst['device_number'] ?? '',
+                            'address' => trim(($inst['province'] ?? '') . ($inst['city'] ?? '') . ($inst['area'] ?? '')),
+                            'billing_mode' => 'flow',
+                            'surplus_flow' => 0,
+                            'remaining_days' => 0,
+                            'is_online' => false,
+                            'network_status' => 'unknown',
+                            'bind_time' => $inst['installed_at'] ?? $inst['created_at'] ?? '',
+                            'status' => $inst['status'] ?? '',
+                            'client_name' => $inst['client_name'] ?? '',
+                            'client_phone' => $inst['client_phone'] ?? '',
+                            'created_at' => $inst['created_at'] ?? '',
+                        ];
+                    }
+                }
+            }
         } catch (Exception $e) {
             $total = 0;
             $devices = [];
@@ -504,9 +608,9 @@ try {
             'message' => 'ok',
             'data' => [
                 'list' => $devices,
-                'total' => $total,
-                'page' => $page,
-                'per_page' => $perPage,
+                'total' => $total > 0 ? $total : count($devices),
+                'page' => 1,
+                'per_page' => 50,
             ]
         ], JSON_UNESCAPED_UNICODE);
         exit;
