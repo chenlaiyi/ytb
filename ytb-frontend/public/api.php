@@ -2734,11 +2734,38 @@ try {
         $devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $list = [];
+
+        // 从 qiyun_devices 获取心跳时间，用于判断真实在线状态
+        $qiyunOnlineMap = [];
+        $deviceNumbers = array_filter(array_column($devices, 'device_number'));
+        if (!empty($deviceNumbers)) {
+            try {
+                $tappDb = getTappDB();
+                $dp = implode(',', array_fill(0, count($deviceNumbers), '?'));
+                $qdStmt = $tappDb->prepare("SELECT board_code, last_sync_at FROM qiyun_devices WHERE board_code IN ($dp)");
+                $qdStmt->execute(array_values($deviceNumbers));
+                while ($qd = $qdStmt->fetch(PDO::FETCH_ASSOC)) {
+                    // 5分钟内有心跳视为在线
+                    $isOnline = !empty($qd['last_sync_at']) && (time() - strtotime($qd['last_sync_at'])) < 300;
+                    $qiyunOnlineMap[$qd['board_code']] = [
+                        'is_online' => $isOnline,
+                        'last_sync_at' => $qd['last_sync_at'],
+                    ];
+                }
+            } catch (Exception $e) {}
+        }
+
+        $onlineCount = 0;
         foreach ($devices as $d) {
             // 状态映射
             $statusMap = ['pending' => '待激活', 'assigned' => '已分配', 'installed' => '已安装', 'activated' => '已激活', 'disabled' => '已禁用'];
-            $networkMap = ['0' => '离线', '1' => '在线'];
             $billingMap = ['flow' => '流量计费', 'time' => '包年计费', 'retail' => '零售'];
+
+            // 通过心跳判断在线状态
+            $devNum = $d['device_number'] ?? '';
+            $qiyunInfo = $qiyunOnlineMap[$devNum] ?? null;
+            $isOnline = $qiyunInfo ? $qiyunInfo['is_online'] : false;
+            if ($isOnline) $onlineCount++;
 
             // 计算进度百分比
             $waterLevelPct = 0;
@@ -2748,7 +2775,7 @@ try {
 
             if ($d['billing_mode'] == 'flow') {
                 $surplus = floatval($d['surplus_flow'] ?? 0);
-                $totalFlow = floatval($d['total_recharged_flow'] ?? 4500); // 使用总充值流量作为总量
+                $totalFlow = floatval($d['total_recharged_flow'] ?? 4500);
                 $waterLevelPct = $totalFlow > 0 ? min(100, round($surplus / $totalFlow * 100)) : 0;
                 $isLowWater = $surplus < 100;
             }
@@ -2766,8 +2793,9 @@ try {
                 'device_type' => $d['device_type'] ?? '净水器',
                 'status' => $d['status'] ?? 'pending',
                 'status_text' => $statusMap[$d['status']] ?? '未知',
-                'network_status' => $d['network_status'] ?? '0',
-                'network_status_text' => $networkMap[$d['network_status']] ?? '未知',
+                'network_status' => $isOnline ? '1' : '0',
+                'network_status_text' => $isOnline ? '在线' : '离线',
+                'last_sync_at' => $qiyunInfo['last_sync_at'] ?? '',
                 'client_name' => $d['client_name'] ?? '',
                 'client_phone' => $d['client_phone'] ?? '',
                 'client_wx_nickname' => '',
@@ -2797,7 +2825,7 @@ try {
             ];
         }
 
-        // 统计
+        // 统计（在线数使用心跳统计）
         $todayStart = date('Y-m-d 00:00:00');
         $monthStart = date('Y-m-01 00:00:00');
         $statsStmt = $db->query("
@@ -2805,7 +2833,6 @@ try {
                 COUNT(*) as total,
                 SUM(CASE WHEN status = 'activated' THEN 1 ELSE 0 END) as active,
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-                SUM(CASE WHEN network_status = '1' THEN 1 ELSE 0 END) as online,
                 SUM(CASE WHEN LENGTH(imei) >= 10 THEN 1 ELSE 0 END) as iot_registered,
                 SUM(CASE WHEN create_date >= '{$todayStart}' THEN 1 ELSE 0 END) as today,
                 SUM(CASE WHEN create_date >= '{$monthStart}' THEN 1 ELSE 0 END) as this_month
@@ -2813,7 +2840,19 @@ try {
         ");
         $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
         $totalDevices = intval($stats['total'] ?? 0);
-        $onlineDevices = intval($stats['online'] ?? 0);
+
+        // 在线数从心跳结果获取（全量，非分页）
+        $allOnlineCount = 0;
+        try {
+            $tappDb = getTappDB();
+            $allDevNums = $db->query("SELECT device_number FROM ytb_devices")->fetchAll(PDO::FETCH_COLUMN);
+            if (!empty($allDevNums)) {
+                $dp2 = implode(',', array_fill(0, count($allDevNums), '?'));
+                $qdStmt2 = $tappDb->prepare("SELECT COUNT(*) FROM qiyun_devices WHERE board_code IN ($dp2) AND last_sync_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)");
+                $qdStmt2->execute($allDevNums);
+                $allOnlineCount = (int)$qdStmt2->fetchColumn();
+            }
+        } catch (Exception $e) {}
 
         echo json_encode([
             'code' => 0,
@@ -2827,9 +2866,9 @@ try {
                     'pending_devices' => intval($stats['pending'] ?? 0),
                     'active_devices' => intval($stats['active'] ?? 0),
                     'iot_registered_devices' => intval($stats['iot_registered'] ?? 0),
-                    'online_devices' => $onlineDevices,
-                    'offline_devices' => $totalDevices - $onlineDevices,
-                    'online_rate' => $totalDevices > 0 ? round($onlineDevices / $totalDevices * 100, 1) : 0,
+                    'online_devices' => $allOnlineCount,
+                    'offline_devices' => $totalDevices - $allOnlineCount,
+                    'online_rate' => $totalDevices > 0 ? round($allOnlineCount / $totalDevices * 100, 1) : 0,
                     'today_devices' => intval($stats['today'] ?? 0),
                     'this_month_devices' => intval($stats['this_month'] ?? 0),
                 ]
