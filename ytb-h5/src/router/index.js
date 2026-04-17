@@ -4,6 +4,10 @@ import { oneClickAdminLogin } from '@/api/admin'
 import { setAdminAuthData } from '@/utils/auth'
 import { Dialog } from 'vant'
 
+const isYtbStandalone =
+  import.meta.env.MODE === 'ytb-standalone' ||
+  String(import.meta.env.VITE_YTB_STANDALONE || '').toLowerCase() === 'true'
+
 // 路由懒加载
 const Home = () => import('../views/home/Index.vue')
 const FilterLife = () => import('../views/device/Index.vue')
@@ -237,9 +241,12 @@ const invitationRoutes = [
 ];
 
 // 亿拓宝(YTB)独立H5路由
+const ytbRoutePrefix = '/ytb'
+const ytbPath = (path) => `${ytbRoutePrefix}${path}`
+
 const ytbRoutes = [
   {
-    path: '/ytb/login',
+    path: ytbPath('/login'),
     name: 'YtbLogin',
     component: YtbLogin,
     meta: {
@@ -249,7 +256,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/home',
+    path: ytbPath('/home'),
     name: 'YtbHome',
     component: YtbHome,
     meta: {
@@ -259,7 +266,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/upgrade',
+    path: ytbPath('/upgrade'),
     name: 'YtbUpgrade',
     component: YtbUpgrade,
     meta: {
@@ -269,7 +276,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/team',
+    path: ytbPath('/team'),
     name: 'YtbTeam',
     component: YtbTeam,
     meta: {
@@ -279,7 +286,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/commission',
+    path: ytbPath('/commission'),
     name: 'YtbCommission',
     component: YtbCommission,
     meta: {
@@ -289,7 +296,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/profile',
+    path: ytbPath('/profile'),
     name: 'YtbProfile',
     component: YtbProfile,
     meta: {
@@ -299,7 +306,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/applications',
+    path: ytbPath('/applications'),
     name: 'YtbApplications',
     component: YtbApplications,
     meta: {
@@ -309,7 +316,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/register',
+    path: ytbPath('/register'),
     name: 'YtbRegister',
     component: YtbRegister,
     meta: {
@@ -319,7 +326,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/devices',
+    path: ytbPath('/devices'),
     name: 'YtbDevices',
     component: YtbDevices,
     meta: {
@@ -329,7 +336,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/expand',
+    path: ytbPath('/expand'),
     name: 'YtbExpansion',
     component: YtbExpansion,
     meta: {
@@ -339,7 +346,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/device/:id',
+    path: ytbPath('/device/:id'),
     name: 'YtbDeviceDetail',
     component: YtbDeviceDetail,
     meta: {
@@ -349,7 +356,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/withdraw',
+    path: ytbPath('/withdraw'),
     name: 'YtbWithdraw',
     component: YtbWithdraw,
     meta: {
@@ -359,7 +366,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/withdraw-records',
+    path: ytbPath('/withdraw-records'),
     name: 'YtbWithdrawRecords',
     component: YtbWithdrawRecords,
     meta: {
@@ -369,7 +376,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/investment',
+    path: ytbPath('/investment'),
     name: 'YtbInvestment',
     component: YtbInvestment,
     meta: {
@@ -379,7 +386,7 @@ const ytbRoutes = [
     }
   },
   {
-    path: '/ytb/installations',
+    path: ytbPath('/installations'),
     name: 'YtbInstallations',
     component: YtbInstallations,
     meta: {
@@ -391,8 +398,110 @@ const ytbRoutes = [
   // YTB默认路由重定向
   {
     path: '/ytb',
-    redirect: '/ytb/devices'
-  }
+    redirect: ytbPath('/devices')
+  },
+  ...(isYtbStandalone
+    ? [
+        {
+          path: '/',
+          redirect: '/devices'
+        },
+        // 根路径别名路由（TabBar 和页面导航使用）
+        {
+          path: '/devices',
+          name: 'YtbStandaloneDevices',
+          component: YtbDevices,
+          meta: { title: '我的设备', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/expand',
+          name: 'YtbStandaloneExpand',
+          component: YtbExpansion,
+          meta: { title: '拓展', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/home',
+          name: 'YtbStandaloneHome',
+          component: YtbHome,
+          meta: { title: '亿拓宝首页', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/profile',
+          name: 'YtbStandaloneProfile',
+          component: YtbProfile,
+          meta: { title: '个人中心', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/upgrade',
+          name: 'YtbStandaloneUpgrade',
+          component: YtbUpgrade,
+          meta: { title: '升级中心', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/team',
+          name: 'YtbStandaloneTeam',
+          component: YtbTeam,
+          meta: { title: '我的团队', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/commission',
+          name: 'YtbStandaloneCommission',
+          component: YtbCommission,
+          meta: { title: '分佣记录', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/register',
+          name: 'YtbStandaloneRegister',
+          component: YtbRegister,
+          meta: { title: '注册', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/device/:id',
+          name: 'YtbStandaloneDeviceDetail',
+          component: YtbDeviceDetail,
+          meta: { title: '设备详情', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/withdraw',
+          name: 'YtbStandaloneWithdraw',
+          component: YtbWithdraw,
+          meta: { title: '提现', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/withdraw-records',
+          name: 'YtbStandaloneWithdrawRecords',
+          component: YtbWithdrawRecords,
+          meta: { title: '提现记录', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/applications',
+          name: 'YtbStandaloneApplications',
+          component: YtbApplications,
+          meta: { title: '升级申请', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/investment',
+          name: 'YtbStandaloneInvestment',
+          component: YtbInvestment,
+          meta: { title: 'Boss投资', hideTabBar: true, requiresAuth: false }
+        },
+        {
+          path: '/installations',
+          name: 'YtbStandaloneInstallations',
+          component: YtbInstallations,
+          meta: { title: '安装推广', hideTabBar: true, requiresAuth: false }
+        },
+        // 兼容 /ytb/* 路径
+        {
+          path: '/ytb/:pathMatch(.*)*',
+          redirect: (to) => {
+            const raw = to.params.pathMatch
+            const joined = Array.isArray(raw) ? raw.join('/') : (raw || '')
+            return joined ? `/${joined}` : '/devices'
+          }
+        }
+      ]
+    : [])
 ];
 
 // VIP会员相关路由
@@ -1010,16 +1119,32 @@ const routes = [
       hideTabBar: true
     }
   },
-  {
-    path: '/login',
-    name: 'Login',
-    component: Login,
-    meta: {
-      title: '登录',
-      hideTabBar: true,
-      requiresAuth: false
-    }
-  },
+  ...(isYtbStandalone
+    ? [
+        {
+          path: '/legacy-login',
+          redirect: '/ytb/login'
+        },
+        {
+          path: '/login',
+          redirect: '/ytb/login'
+        }
+      ]
+    : []),
+  ...(!isYtbStandalone
+    ? [
+        {
+          path: '/login',
+          name: 'Login',
+          component: Login,
+          meta: {
+            title: '登录',
+            hideTabBar: true,
+            requiresAuth: false
+          }
+        }
+      ]
+    : []),
   {
     path: '/user/login',
     redirect: '/login'
@@ -2361,8 +2486,46 @@ const resolveLoginRedirectTarget = (rawRedirect) => {
 
 // 全局前置守卫
 router.beforeEach(async (to, from, next) => {
+  if (isYtbStandalone) {
+    const standaloneBypassPaths = new Set([
+      '/login',
+      '/ytb/login',
+      '/legacy-login',
+      '/register',
+      '/ytb/register',
+      '/wechat-callback',
+      '/user/wechat-callback',
+      '/wechat-success',
+      '/user/wechat-success',
+      '/wechat-error',
+      '/user/wechat-error',
+      '/bind-phone'
+    ])
+
+    if (standaloneBypassPaths.has(to.path)) {
+      next()
+      return
+    }
+
+    if (to.path === '/') {
+      next('/devices')
+      return
+    }
+
+    if (to.path.startsWith('/ytb')) {
+      next()
+      return
+    }
+
+    if (!String(to.name || '').startsWith('Ytb')) {
+      next('/devices')
+      return
+    }
+  }
+
   // 对于登录页面和微信回调页面，直接跳过所有验证
-  if (to.path === '/login' || to.path === '/user/login' || to.path === '/wechat-callback') {
+  // YTB 独立模式下实际登录入口改成了 /legacy-login，避免被守卫误判后重定向到 /devices。
+  if (to.path === '/login' || to.path === '/legacy-login' || to.path === '/user/login' || to.path === '/wechat-callback') {
     next()
     return
   }
@@ -2904,7 +3067,7 @@ router.beforeEach(async (to, from, next) => {
 
     // 如果用户已登录并试图访问登录页，直接跳转到个人中心
     // 但在模拟登录模式下允许访问
-    if (isLoggedIn && (to.path === '/login' || to.path === '/user/login') && !isSimulateMode) {
+    if (isLoggedIn && (to.path === '/login' || to.path === '/legacy-login' || to.path === '/user/login') && !isSimulateMode) {
       next('/user')
       return
     }
@@ -3135,7 +3298,7 @@ router.beforeEach(async (to, from, next) => {
     // 不需要认证的页面直接通过
     // 特殊处理：如果访问登录页且已经登录，重定向到首页
     if (
-      (to.path === '/user/login' || to.path === '/login') &&
+      (to.path === '/user/login' || to.path === '/login' || to.path === '/legacy-login') &&
       !to.query.simulate_token &&
       to.query.force !== '1'
     ) {

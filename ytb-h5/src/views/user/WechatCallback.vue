@@ -216,6 +216,81 @@ const navigateToRedirectTarget = () => {
 const handleCallback = async () => {
   initProgressBar()
 
+  // === 新增：处理来自 pay.itapgo.com OAuth代理的直接token ===
+  let directToken = route.query.token
+  let directUser = route.query.user
+  let directRedirect = route.query.redirect
+
+  if (!directToken) {
+    const hashIndex = window.location.hash.indexOf('?')
+    if (hashIndex > -1) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(hashIndex + 1))
+      directToken = hashParams.get('token')
+      directUser = hashParams.get('user')
+      directRedirect = hashParams.get('redirect')
+    }
+  }
+
+  if (directToken) {
+    try {
+      loadingText.value = '正在处理登录...'
+      
+      // 解析用户数据
+      let userData = {}
+      if (directUser) {
+        try {
+          userData = JSON.parse(atob(decodeURIComponent(directUser)))
+        } catch (e) {
+          console.warn('解析用户数据失败:', e)
+        }
+      }
+
+      // 设置重定向目标
+      if (directRedirect) {
+        let target = decodeURIComponent(directRedirect)
+        // /home 在 YTB standalone 模式下不存在，映射到 /devices
+        if (target === '/home') target = '/devices'
+        redirectTarget.value = target
+      } else {
+        redirectTarget.value = '/devices'
+      }
+
+      // 保存登录状态
+      localStorage.setItem('token', directToken)
+      localStorage.setItem('userInfo', JSON.stringify(userData))
+      localStorage.setItem('ytb_token', directToken)
+      localStorage.setItem('ytb_user', JSON.stringify(userData))
+      localStorage.setItem('isLoggedIn', 'true')
+      localStorage.setItem('fromWechatLogin', 'true')
+      localStorage.setItem('loginTimestamp', Date.now().toString())
+
+      // 更新 store
+      userStore.setToken(directToken)
+      userStore.setUserInfo(userData)
+
+      // 使用认证工具保存
+      try {
+        const authModule = await import('@/utils/auth')
+        authModule.setAuthData(directToken, userData)
+      } catch (e) {
+        console.warn('auth module 保存失败:', e)
+      }
+
+      completeProgress()
+      showSuccess('登录成功，正在为您跳转...')
+
+      setTimeout(() => {
+        navigateToRedirectTarget()
+      }, 800)
+      return
+    } catch (error) {
+      console.error('处理代理登录回调失败:', error)
+      showError('登录处理失败，请重试')
+      return
+    }
+  }
+  // === 直接token处理结束 ===
+
   let code = null, state = null;
 
   try {

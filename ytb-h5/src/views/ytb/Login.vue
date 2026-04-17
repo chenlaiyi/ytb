@@ -95,6 +95,23 @@ useYtbShare('亿拓宝联盟')
 const route = useRoute()
 const router = useRouter()
 
+const normalizeWechatAuthUrl = (url) => {
+  if (!url) return ''
+
+  let normalized = String(url).trim()
+
+  // 先统一替换所有明文scope值
+  normalized = normalized.replace(/snsapi_userinfo/gi, 'snsapi_base')
+
+  // 再强制scope参数为base，避免被其他参数拼接污染
+  normalized = normalized.replace(/([?&])scope=[^&#]*/i, '$1scope=snsapi_base')
+
+  // 兼容被encode后的scope参数
+  normalized = normalized.replace(/scope%3D[^%#&]*/i, 'scope%3Dsnsapi_base')
+
+  return normalized
+}
+
 // 状态
 const loading = ref(false)
 const validating = ref(false)
@@ -157,9 +174,9 @@ onMounted(() => {
   // 如果已登录，优先跳转到注册页（带邀请码）
   if (isLoggedIn()) {
     if (code) {
-      router.replace({ path: '/ytb/register', query: { invite_code: code } })
+      router.replace({ path: '/register', query: { invite_code: code } })
     } else {
-      router.replace('/ytb/home')
+      router.replace('/home')
     }
     return
   }
@@ -226,12 +243,20 @@ const handleWechatLogin = async () => {
     }
 
     const redirectUrl = inviteCode.value
-      ? `/ytb/register?invite_code=${inviteCode.value}`
-      : '/ytb/home'
+      ? `/register?invite_code=${inviteCode.value}`
+      : '/devices'
     const res = await getWechatLoginUrl(redirectUrl)
-    if (res.code === 0) {
+    const rawAuthUrl = res?.data?.url || ''
+    const authUrl = normalizeWechatAuthUrl(rawAuthUrl)
+
+    if (res?.code === 0 && authUrl) {
+      window.__ytb_last_auth_url_raw = rawAuthUrl
+      window.__ytb_last_auth_url = authUrl
+      localStorage.setItem('ytb_last_auth_url_raw', String(rawAuthUrl))
+      localStorage.setItem('ytb_last_auth_url', String(authUrl))
+      console.info('[YTB_AUTH_URL]', authUrl)
       // 跳转到微信授权页面
-      window.location.href = res.data.url
+      window.location.href = authUrl
     } else {
       showToast(res.message || '获取登录链接失败')
     }
@@ -284,25 +309,25 @@ onUnmounted(() => {
 }
 
 .logo {
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
-  margin: 0 auto 16px;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  margin: 0 auto 12px;
   object-fit: cover;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   background: rgba(255, 255, 255, 0.9);
 }
 
 .logo-placeholder {
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
-  margin: 0 auto 16px;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  margin: 0 auto 12px;
   background: rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: 24px;
   font-weight: bold;
   color: white;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);

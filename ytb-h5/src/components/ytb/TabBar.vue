@@ -1,12 +1,12 @@
 <template>
   <van-tabbar v-model="active" route class="ytb-tabbar">
-    <van-tabbar-item to="/ytb/devices" icon="cluster-o">
+    <van-tabbar-item to="/devices" icon="cluster-o">
       设备
     </van-tabbar-item>
-    <van-tabbar-item to="/ytb/expand" icon="share-o">
+    <van-tabbar-item to="/expand" icon="share-o">
       拓展
     </van-tabbar-item>
-    <van-tabbar-item to="/ytb/home" icon="user-o">
+    <van-tabbar-item to="/home" icon="user-o">
       我的
     </van-tabbar-item>
   </van-tabbar>
@@ -21,9 +21,9 @@ const active = ref(0)
 
 // 根据当前路由设置激活状态
 watch(() => route.path, (path) => {
-  if (path.startsWith('/ytb/devices') || path.startsWith('/ytb/device/')) {
+  if (path.startsWith('/devices') || path.startsWith('/device/')) {
     active.value = 0
-  } else if (path.startsWith('/ytb/expand')) {
+  } else if (path.startsWith('/expand')) {
     active.value = 1
   } else {
     active.value = 2

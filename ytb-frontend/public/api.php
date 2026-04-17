@@ -97,9 +97,899 @@ if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
 // 获取请求体
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
+function getCurrentOrigin() {
+    $forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+    if (strtolower($forwardedProto) === 'https') {
+        $scheme = 'https';
+    } else {
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    }
+
+    $host = $_SERVER['HTTP_HOST'] ?? 'ytb.ddg.org.cn';
+    return $scheme . '://' . $host;
+}
+
+function forwardJsonRequest($url, $method = 'GET', $payload = null, $timeout = 15) {
+    $headers = [
+        'Accept: application/json',
+        'Content-Type: application/json',
+    ];
+
+    $options = [
+        'http' => [
+            'method' => strtoupper($method),
+            'timeout' => $timeout,
+            'ignore_errors' => true,
+            'header' => implode("\r\n", $headers),
+        ],
+    ];
+
+    if ($payload !== null) {
+        $options['http']['content'] = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    $context = stream_context_create($options);
+    $rawBody = @file_get_contents($url, false, $context);
+    if ($rawBody === false) {
+        return null;
+    }
+
+    $status = 200;
+    if (isset($http_response_header) && is_array($http_response_header) && isset($http_response_header[0])) {
+        if (preg_match('/\s(\d{3})\s/', $http_response_header[0], $matches)) {
+            $status = (int)$matches[1];
+        }
+    }
+
+    $decoded = json_decode($rawBody, true);
+    if (!is_array($decoded)) {
+        return null;
+    }
+
+    return [
+        'status' => $status,
+        'data' => $decoded,
+    ];
+}
+
+function buildWechatOauthUrl($appId, $redirectUri, $state = '/home', $componentAppId = '') {
+    $query = http_build_query([
+        'appid' => $appId,
+        'redirect_uri' => $redirectUri,
+        'response_type' => 'code',
+        'scope' => 'snsapi_base',
+        'state' => $state,
+    ]);
+
+    if (!empty($componentAppId)) {
+        $query .= '&component_appid=' . urlencode($componentAppId);
+    }
+
+    return 'https://open.weixin.qq.com/connect/oauth2/authorize?' . $query . '#wechat_redirect';
+}
+
+function getTableColumns($db, $table) {
+    static $cache = [];
+    $key = $table;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $stmt = $db->prepare("SHOW COLUMNS FROM `{$table}`");
+    $stmt->execute();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $columns = [];
+    foreach ($rows as $row) {
+        if (!empty($row['Field'])) {
+            $columns[$row['Field']] = true;
+        }
+    }
+
+    $cache[$key] = $columns;
+    return $columns;
+}
+
+function getWechatAccountConfig($db, $preferredAppId) {
+    try {
+        $columns = getTableColumns($db, 'wechat_authorized_accounts');
+
+        $selectFields = [];
+        $appIdField = isset($columns['authorizer_appid']) ? 'authorizer_appid' : (isset($columns['app_id']) ? 'app_id' : null);
+        $appSecretField = isset($columns['app_secret']) ? 'app_secret' : (isset($columns['authorizer_appsecret']) ? 'authorizer_appsecret' : null);
+        $tokenField = isset($columns['authorizer_access_token']) ? 'authorizer_access_token' : null;
+
+        if (!$appIdField) {
+            return null;
+        }
+
+        $selectFields[] = $appIdField;
+        if ($appSecretField) {
+            $selectFields[] = $appSecretField;
+        }
+        if ($tokenField) {
+            $selectFields[] = $tokenField;
+        }
+
+        $sql = 'SELECT ' . implode(', ', array_unique($selectFields)) . ' FROM wechat_authorized_accounts';
+        $params = [];
+
+        if (isset($columns['status'])) {
+            $sql .= " WHERE status = 'active'";
+            if (!empty($preferredAppId)) {
+                $sql .= " AND {$appIdField} = ?";
+                $params[] = $preferredAppId;
+            }
+        } else if (!empty($preferredAppId)) {
+            $sql .= " WHERE {$appIdField} = ?";
+            $params[] = $preferredAppId;
+        }
+
+        if (isset($columns['updated_at'])) {
+            $sql .= ' ORDER BY updated_at DESC';
+        } else if (isset($columns['id'])) {
+            $sql .= ' ORDER BY id DESC';
+        }
+        $sql .= ' LIMIT 1';
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'app_id' => $row[$appIdField] ?? '',
+            'app_secret' => $appSecretField ? ($row[$appSecretField] ?? '') : '',
+            'authorizer_access_token' => $tokenField ? ($row[$tokenField] ?? '') : '',
+        ];
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function getWechatComponentConfig($db) {
+    $candidateTables = [
+        'wechat_third_party_platform_configs',
+        'wechat_third_party_platforms',
+        'wechat_third_party_configs',
+    ];
+
+    foreach ($candidateTables as $table) {
+        try {
+            $columns = getTableColumns($db, $table);
+            if (!$columns) {
+                continue;
+            }
+
+            $appIdField = isset($columns['component_appid']) ? 'component_appid' : (isset($columns['app_id']) ? 'app_id' : null);
+            if (!$appIdField) {
+                continue;
+            }
+
+            $tokenField = isset($columns['component_access_token'])
+                ? 'component_access_token'
+                : (isset($columns['access_token']) ? 'access_token' : null);
+
+            $selectFields = [$appIdField];
+            if ($tokenField) {
+                $selectFields[] = $tokenField;
+            }
+
+            $sql = 'SELECT ' . implode(', ', array_unique($selectFields)) . ' FROM ' . $table;
+            if (isset($columns['is_active'])) {
+                $sql .= ' WHERE is_active = 1';
+            } else if (isset($columns['status'])) {
+                $sql .= " WHERE status IN ('active', 'enabled', '1', 1)";
+            }
+
+            if (isset($columns['updated_at'])) {
+                $sql .= ' ORDER BY updated_at DESC';
+            } else if (isset($columns['id'])) {
+                $sql .= ' ORDER BY id DESC';
+            }
+            $sql .= ' LIMIT 1';
+
+            $stmt = $db->prepare($sql);
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                continue;
+            }
+
+            $componentAppId = $row[$appIdField] ?? '';
+            if (empty($componentAppId)) {
+                continue;
+            }
+
+            return [
+                'component_appid' => $componentAppId,
+                'component_access_token' => $tokenField ? ($row[$tokenField] ?? '') : '',
+            ];
+        } catch (Exception $e) {
+            continue;
+        }
+    }
+
+    return null;
+}
+
+function getWechatComponentAppIdFallback() {
+    // 当前系统第三方平台固定AppID（从后台配置页同步）
+    return 'wx542eec58a75fe9e2';
+}
+
+function wechatApiGetJson($url, $timeout = 10) {
+    $context = stream_context_create([
+        'http' => [
+            'timeout' => $timeout,
+            'ignore_errors' => true,
+        ],
+    ]);
+
+    $raw = @file_get_contents($url, false, $context);
+    if ($raw === false) {
+        return null;
+    }
+
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : null;
+}
+
+function saveYtbUserByWechat($db, $wechatUser) {
+    $openid = $wechatUser['openid'] ?? '';
+    if (!$openid) {
+        return null;
+    }
+
+    $unionid = $wechatUser['unionid'] ?? null;
+    $nickname = $wechatUser['nickname'] ?? ('微信用户' . substr(md5($openid), 0, 6));
+    $avatar = $wechatUser['headimgurl'] ?? '';
+
+    $stmt = $db->prepare('SELECT * FROM ytb_users WHERE openid = ? LIMIT 1');
+    $stmt->execute([$openid]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($user) {
+        $updateStmt = $db->prepare('UPDATE ytb_users SET unionid = ?, nickname = ?, avatar = ?, updated_at = NOW() WHERE id = ?');
+        $updateStmt->execute([$unionid, $nickname, $avatar, $user['id']]);
+    } else {
+        $insertStmt = $db->prepare(
+            "INSERT INTO ytb_users (openid, unionid, nickname, avatar, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'normal', 'active', NOW(), NOW())"
+        );
+        $insertStmt->execute([$openid, $unionid, $nickname, $avatar]);
+
+        $stmt = $db->prepare('SELECT * FROM ytb_users WHERE id = ? LIMIT 1');
+        $stmt->execute([$db->lastInsertId()]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    if (!$user) {
+        return null;
+    }
+
+    $apiToken = bin2hex(random_bytes(24));
+    $tokenExpiresAt = date('Y-m-d H:i:s', time() + 30 * 24 * 60 * 60);
+
+    $tokenStmt = $db->prepare('UPDATE ytb_users SET api_token = ?, token_expires_at = ?, updated_at = NOW() WHERE id = ?');
+    $tokenStmt->execute([$apiToken, $tokenExpiresAt, $user['id']]);
+
+    $user['api_token'] = $apiToken;
+    $user['token_expires_at'] = $tokenExpiresAt;
+    return $user;
+}
+
 // 简单路由
 try {
     $db = getDB();
+
+    // ==================== YTB 普通用户 API 路由 ====================
+    
+    // YTB用户Token认证函数
+    function authenticateYtbUser($db, $token) {
+        if (empty($token)) return null;
+        $stmt = $db->prepare('SELECT * FROM ytb_users WHERE api_token = ? AND status = "active" LIMIT 1');
+        $stmt->execute([$token]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$user) return null;
+        // 检查token是否过期
+        if (!empty($user['token_expires_at']) && strtotime($user['token_expires_at']) < time()) return null;
+        return $user;
+    }
+
+    // YTB 系统配置
+    if ($path === 'ytb/config' && $method === 'GET') {
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => [
+                'app_name' => '亿拓宝联盟',
+                'version' => '1.0.0',
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 获取当前用户信息
+    if ($path === 'ytb/user/me' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => [
+                'id' => (int)$user['id'],
+                'userId' => (int)$user['id'],
+                'openid' => $user['openid'] ?? '',
+                'unionid' => $user['unionid'] ?? '',
+                'nickname' => $user['nickname'] ?? '',
+                'name' => $user['nickname'] ?? '',
+                'avatar' => $user['avatar'] ?? '',
+                'phone' => $user['phone'] ?? '',
+                'real_name' => $user['real_name'] ?? '',
+                'role' => $user['role'] ?? 'normal',
+                'invite_code' => $user['invite_code'] ?? '',
+                'available_balance' => $user['available_balance'] ?? '0.00',
+                'frozen_balance' => $user['frozen_balance'] ?? '0.00',
+                'direct_scp_count' => (int)($user['direct_scp_count'] ?? 0),
+                'direct_user_count' => (int)($user['direct_user_count'] ?? 0),
+                'created_at' => $user['created_at'] ?? '',
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 更新用户信息
+    if ($path === 'ytb/user/update' && $method === 'POST') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $updates = [];
+        $params = [];
+        foreach (['nickname', 'real_name', 'phone'] as $field) {
+            if (isset($input[$field])) {
+                $updates[] = "$field = ?";
+                $params[] = $input[$field];
+            }
+        }
+        if (!empty($updates)) {
+            $updates[] = 'updated_at = NOW()';
+            $params[] = $user['id'];
+            $sql = 'UPDATE ytb_users SET ' . implode(', ', $updates) . ' WHERE id = ?';
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+        }
+        echo json_encode(['code' => 0, 'message' => '更新成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 获取设备列表
+    if ($path === 'ytb/devices' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        // 查询用户关联的净水器设备
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
+        $offset = ($page - 1) * $perPage;
+
+        // 尝试查水机安装记录
+        try {
+            $countStmt = $db->prepare('SELECT COUNT(*) FROM ytb_water_installations WHERE promoter_id = ?');
+            $countStmt->execute([$user['id']]);
+            $total = (int)$countStmt->fetchColumn();
+
+            $listStmt = $db->prepare('SELECT * FROM ytb_water_installations WHERE promoter_id = ? ORDER BY created_at DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset);
+            $listStmt->execute([$user['id']]);
+            $devices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $total = 0;
+            $devices = [];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => [
+                'list' => $devices,
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 获取邀请码
+    if ($path === 'ytb/user/invite-code' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        // 如果用户还没有邀请码，生成一个
+        if (empty($user['invite_code'])) {
+            $inviteCode = str_pad(mt_rand(0, 999999), 6, '0', STR_PAD_LEFT);
+            $stmt = $db->prepare('UPDATE ytb_users SET invite_code = ?, updated_at = NOW() WHERE id = ?');
+            $stmt->execute([$inviteCode, $user['id']]);
+            $user['invite_code'] = $inviteCode;
+        }
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => ['invite_code' => $user['invite_code']]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 获取团队成员
+    if ($path === 'ytb/user/team' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
+        $offset = ($page - 1) * $perPage;
+
+        $countStmt = $db->prepare('SELECT COUNT(*) FROM ytb_users WHERE parent_id = ?');
+        $countStmt->execute([$user['id']]);
+        $total = (int)$countStmt->fetchColumn();
+
+        $listStmt = $db->prepare('SELECT id, nickname, avatar, phone, role, created_at FROM ytb_users WHERE parent_id = ? ORDER BY created_at DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset);
+        $listStmt->execute([$user['id']]);
+        $members = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => ['list' => $members, 'total' => $total, 'page' => $page, 'per_page' => $perPage]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 获取分佣记录
+    if ($path === 'ytb/user/commissions' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
+        $offset = ($page - 1) * $perPage;
+
+        try {
+            $countStmt = $db->prepare('SELECT COUNT(*) FROM ytb_commissions WHERE user_id = ?');
+            $countStmt->execute([$user['id']]);
+            $total = (int)$countStmt->fetchColumn();
+
+            $listStmt = $db->prepare('SELECT * FROM ytb_commissions WHERE user_id = ? ORDER BY created_at DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset);
+            $listStmt->execute([$user['id']]);
+            $commissions = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $total = 0;
+            $commissions = [];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => ['list' => $commissions, 'total' => $total, 'page' => $page, 'per_page' => $perPage]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 获取升级信息
+    if ($path === 'ytb/upgrade/info' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => [
+                'current_role' => $user['role'] ?? 'normal',
+                'can_upgrade_scp' => ($user['role'] === 'normal'),
+                'can_upgrade_team_cp' => ($user['role'] === 'scp'),
+                'can_upgrade_boss_cp' => ($user['role'] === 'team_cp'),
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 提现信息
+    if ($path === 'ytb/withdraw/info' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => [
+                'available_balance' => $user['available_balance'] ?? '0.00',
+                'frozen_balance' => $user['frozen_balance'] ?? '0.00',
+                'min_withdraw' => '10.00',
+                'fee_rate' => '0.006',
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 退出登录
+    if ($path === 'ytb/auth/logout' && $method === 'POST') {
+        $user = authenticateYtbUser($db, $token);
+        if ($user) {
+            $stmt = $db->prepare('UPDATE ytb_users SET api_token = NULL, updated_at = NOW() WHERE id = ?');
+            $stmt->execute([$user['id']]);
+        }
+        echo json_encode(['code' => 0, 'message' => '退出成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 获取海报列表
+    if ($path === 'ytb/posters' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        try {
+            $stmt = $db->prepare('SELECT * FROM ytb_posters WHERE status = "active" ORDER BY sort_order ASC, created_at DESC');
+            $stmt->execute();
+            $posters = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $posters = [];
+        }
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => ['items' => $posters, 'total' => count($posters)]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 验证邀请码
+    if ($path === 'ytb/invite-code/validate' && $method === 'POST') {
+        $inviteCode = $input['invite_code'] ?? '';
+        if (empty($inviteCode) || strlen($inviteCode) !== 6) {
+            echo json_encode(['code' => 400, 'message' => '请输入6位邀请码'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $stmt = $db->prepare('SELECT id, nickname, role FROM ytb_users WHERE invite_code = ? AND status = "active" LIMIT 1');
+        $stmt->execute([$inviteCode]);
+        $inviter = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$inviter) {
+            echo json_encode(['code' => 404, 'message' => '邀请码无效'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $roleNames = ['normal' => '普通用户', 'scp' => 'SCP', 'team_cp' => 'VIPCP', 'boss_cp' => 'BossCP'];
+        $inviter['role_name'] = $roleNames[$inviter['role']] ?? $inviter['role'];
+        echo json_encode(['code' => 0, 'message' => 'ok', 'data' => ['inviter' => $inviter]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 用户绑定上级
+    if ($path === 'ytb/user/bind-parent' && $method === 'POST') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if (!empty($user['parent_id'])) {
+            echo json_encode(['code' => 400, 'message' => '已有上级，无法重复绑定'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $inviteCode = $input['invite_code'] ?? '';
+        $stmt = $db->prepare('SELECT id FROM ytb_users WHERE invite_code = ? AND status = "active" LIMIT 1');
+        $stmt->execute([$inviteCode]);
+        $parent = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$parent) {
+            echo json_encode(['code' => 404, 'message' => '邀请码无效'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ((int)$parent['id'] === (int)$user['id']) {
+            echo json_encode(['code' => 400, 'message' => '不能绑定自己为上级'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $stmt = $db->prepare('UPDATE ytb_users SET parent_id = ?, updated_at = NOW() WHERE id = ?');
+        $stmt->execute([$parent['id'], $user['id']]);
+        // 更新上级的直推计数
+        $stmt = $db->prepare('UPDATE ytb_users SET direct_user_count = direct_user_count + 1, updated_at = NOW() WHERE id = ?');
+        $stmt->execute([$parent['id']]);
+        echo json_encode(['code' => 0, 'message' => '绑定成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 提现列表
+    if ($path === 'ytb/withdraw/list' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
+        $offset = ($page - 1) * $perPage;
+        try {
+            $countStmt = $db->prepare('SELECT COUNT(*) FROM ytb_withdrawals WHERE user_id = ?');
+            $countStmt->execute([$user['id']]);
+            $total = (int)$countStmt->fetchColumn();
+            $listStmt = $db->prepare('SELECT * FROM ytb_withdrawals WHERE user_id = ? ORDER BY created_at DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset);
+            $listStmt->execute([$user['id']]);
+            $list = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $total = 0;
+            $list = [];
+        }
+        echo json_encode(['code' => 0, 'message' => 'ok', 'data' => ['list' => $list, 'total' => $total]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 升级申请列表
+    if ($path === 'ytb/upgrade/applications' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        try {
+            $stmt = $db->prepare('SELECT * FROM ytb_upgrade_applications WHERE user_id = ? ORDER BY created_at DESC');
+            $stmt->execute([$user['id']]);
+            $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $list = [];
+        }
+        echo json_encode(['code' => 0, 'message' => 'ok', 'data' => ['list' => $list]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 投资列表
+    if ($path === 'ytb/investments' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        try {
+            $stmt = $db->prepare('SELECT * FROM ytb_boss_investments WHERE user_id = ? ORDER BY created_at DESC');
+            $stmt->execute([$user['id']]);
+            $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $list = [];
+        }
+        echo json_encode(['code' => 0, 'message' => 'ok', 'data' => ['list' => $list]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 投资统计
+    if ($path === 'ytb/investments/stats' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        echo json_encode(['code' => 0, 'message' => 'ok', 'data' => ['total_invested' => '0.00', 'total_return' => '0.00']], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 安装记录
+    if ($path === 'ytb/installations' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        try {
+            $stmt = $db->prepare('SELECT * FROM ytb_water_installations WHERE promoter_id = ? ORDER BY created_at DESC');
+            $stmt->execute([$user['id']]);
+            $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $list = [];
+        }
+        echo json_encode(['code' => 0, 'message' => 'ok', 'data' => ['list' => $list]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 安装统计
+    if ($path === 'ytb/installations/stats' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        echo json_encode(['code' => 0, 'message' => 'ok', 'data' => ['total_installations' => 0, 'pending' => 0, 'completed' => 0]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // ==================== 微信登录URL（YTB域名独立入口，后端网关转发）====================
+    if (($path === 'ytb/auth/login-url' || $path === 'mobile/v1/wechat/login-url' || $path === 'mobile/v1/auth/wechat-url') && $method === 'GET') {
+        $state = $_GET['state'] ?? $_GET['redirect_url'] ?? '/home';
+        $redirectUri = $_GET['redirect_uri'] ?? (getCurrentOrigin() . '/app/#/wechat-callback');
+
+        // 通过 pay.itapgo.com 代理OAuth（因为ytb域名不在第三方平台的授权域名内）
+        $authUrl = 'https://pay.itapgo.com/ytb-oauth-init.php?redirect_url=' . urlencode($state);
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取微信登录地址成功',
+            'data' => [
+                'url' => $authUrl,
+                'auth_url' => $authUrl,
+            ],
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+
+        // 明确关闭 pay 上游回退，避免 ytb 登录链路影响 pay 站点。
+        http_response_code(503);
+        echo json_encode([
+            'code' => 503,
+            'message' => 'YTB微信登录配置不完整，请联系管理员完成公众号配置',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    // 微信登录回调（YTB域名独立入口，后端网关转发）
+    if ($path === 'mobile/v1/auth/wechat-callback' && $method === 'POST') {
+        $code = $input['code'] ?? '';
+        if (!$code) {
+            http_response_code(400);
+            echo json_encode(['code' => 400, 'message' => '缺少微信授权码']);
+            exit;
+        }
+
+        // 使用第三方平台代授权OAuth回调
+        $tappDb = getTappDB();
+        if ($tappDb) {
+            $config = getWechatAccountConfig($tappDb, 'wx644418e60bf1f7a2');
+            $appId = $config['app_id'] ?? '';
+            $appSecret = $config['app_secret'] ?? '';
+            $componentConfig = getWechatComponentConfig($tappDb);
+            $componentAppId = $componentConfig['component_appid'] ?? '';
+            $componentAccessToken = $componentConfig['component_access_token'] ?? '';
+            if (empty($componentAppId)) {
+                $componentAppId = getWechatComponentAppIdFallback();
+            }
+
+            if ($appId) {
+                $oauthToken = null;
+
+                // 使用第三方平台组件代授权换取token
+                if ($componentAppId && $componentAccessToken) {
+                    $componentTokenUrl = 'https://api.weixin.qq.com/sns/oauth2/component/access_token?' . http_build_query([
+                        'appid' => $appId,
+                        'code' => $code,
+                        'grant_type' => 'authorization_code',
+                        'component_appid' => $componentAppId,
+                        'component_access_token' => $componentAccessToken,
+                    ]);
+                    $oauthToken = wechatApiGetJson($componentTokenUrl);
+                }
+
+                // 回退直接公众号授权（需要app_secret）
+                if ((!$oauthToken || (!empty($oauthToken['errcode']) && (int)$oauthToken['errcode'] !== 0)) && $appSecret) {
+                    $tokenUrl = 'https://api.weixin.qq.com/sns/oauth2/access_token?' . http_build_query([
+                        'appid' => $appId,
+                        'secret' => $appSecret,
+                        'code' => $code,
+                        'grant_type' => 'authorization_code',
+                    ]);
+                    $oauthToken = wechatApiGetJson($tokenUrl);
+                }
+
+                if ($oauthToken && !empty($oauthToken['errcode'])) {
+                    http_response_code(400);
+                    echo json_encode([
+                        'code' => 400,
+                        'message' => '微信授权码无效或已过期',
+                        'wechat_error' => [
+                            'errcode' => $oauthToken['errcode'],
+                            'errmsg' => $oauthToken['errmsg'] ?? '',
+                        ],
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    exit;
+                }
+
+                if ($oauthToken && empty($oauthToken['errcode']) && !empty($oauthToken['openid'])) {
+                    $snsToken = $oauthToken['access_token'] ?? '';
+                    $openid = $oauthToken['openid'] ?? '';
+
+                    $wechatUser = [
+                        'openid' => $openid,
+                        'unionid' => $oauthToken['unionid'] ?? null,
+                        'nickname' => '微信用户',
+                        'headimgurl' => '',
+                    ];
+
+                    if ($snsToken && $openid) {
+                        $userInfoUrl = 'https://api.weixin.qq.com/sns/userinfo?' . http_build_query([
+                            'access_token' => $snsToken,
+                            'openid' => $openid,
+                            'lang' => 'zh_CN',
+                        ]);
+                        $userInfo = wechatApiGetJson($userInfoUrl);
+                        if ($userInfo && empty($userInfo['errcode'])) {
+                            $wechatUser = array_merge($wechatUser, $userInfo);
+                        }
+                    }
+
+                    $user = saveYtbUserByWechat($db, $wechatUser);
+                    if ($user && !empty($user['api_token'])) {
+                        $payloadUser = [
+                            'id' => (int)($user['id'] ?? 0),
+                            'userId' => (int)($user['id'] ?? 0),
+                            'nickname' => $user['nickname'] ?? '',
+                            'name' => $user['nickname'] ?? '',
+                            'phone' => $user['phone'] ?? '',
+                            'wechat_nickname' => $wechatUser['nickname'] ?? ($user['nickname'] ?? ''),
+                            'wechat_avatar' => $wechatUser['headimgurl'] ?? ($user['avatar'] ?? ''),
+                            'avatar' => $wechatUser['headimgurl'] ?? ($user['avatar'] ?? ''),
+                            'openid' => $wechatUser['openid'] ?? '',
+                            'unionid' => $wechatUser['unionid'] ?? '',
+                        ];
+
+                        echo json_encode([
+                            'code' => 0,
+                            'message' => '微信登录成功',
+                            'data' => [
+                                'token' => $user['api_token'],
+                                'user' => $payloadUser,
+                                'openid' => $wechatUser['openid'] ?? '',
+                                'unionid' => $wechatUser['unionid'] ?? '',
+                                'nickname' => $wechatUser['nickname'] ?? '',
+                                'headimgurl' => $wechatUser['headimgurl'] ?? '',
+                            ],
+                        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        exit;
+                    }
+                }
+
+                http_response_code(500);
+                echo json_encode([
+                    'code' => 500,
+                    'message' => '微信登录服务异常，请稍后重试',
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                exit;
+            }
+        }
+
+        // 明确关闭 pay 上游回退，避免 ytb 登录链路影响 pay 站点。
+        http_response_code(503);
+        echo json_encode([
+            'code' => 503,
+            'message' => 'YTB微信回调配置不完整，请联系管理员完成公众号配置',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
     
     // 登录
     if ($path === 'admin/v1/auth/login' && $method === 'POST') {
@@ -157,8 +1047,53 @@ try {
         exit;
     }
 
+    // H5 App 底部导航菜单（公开API，无需认证）
+    if ($path === 'app/public/tabbar' && $method === 'GET') {
+        $defaultTabbar = [
+            ['nav_id' => 'home', 'nav_name' => '首页', 'icon' => 'home-o', 'path' => '/', 'status' => 1, 'sort_order' => 10],
+            ['nav_id' => 'device', 'nav_name' => '设备', 'icon' => 'cluster-o', 'path' => '/device', 'status' => 1, 'sort_order' => 20],
+            ['nav_id' => 'water', 'nav_name' => '取水点', 'icon' => 'location-o', 'path' => '/water-point', 'status' => 1, 'sort_order' => 30],
+            ['nav_id' => 'merchant', 'nav_name' => '商家', 'icon' => 'shop-o', 'path' => '/merchant', 'status' => 1, 'sort_order' => 40],
+            ['nav_id' => 'forum', 'nav_name' => '社区', 'icon' => 'chat-o', 'path' => '/forum', 'status' => 1, 'sort_order' => 45],
+            ['nav_id' => 'user', 'nav_name' => '我的', 'icon' => 'user-o', 'path' => '/user', 'status' => 1, 'sort_order' => 50],
+        ];
+        echo json_encode(['code' => 0, 'message' => 'success', 'data' => $defaultTabbar]);
+        exit;
+    }
+
+    // H5 App 首页导航菜单（公开API，无需认证）
+    if ($path === 'app/public/home/nav' && $method === 'GET') {
+        $defaultHomeNav = [
+            ['nav_id' => 'training', 'nav_name' => '培训', 'icon' => 'cluster-o', 'path' => '/training', 'status' => 1, 'sort_order' => 10],
+            ['nav_id' => 'device', 'nav_name' => '设备', 'icon' => 'cluster-o', 'path' => '/device', 'status' => 1, 'sort_order' => 20],
+            ['nav_id' => 'water', 'nav_name' => '取水点', 'icon' => 'location-o', 'path' => '/water-point', 'status' => 1, 'sort_order' => 30],
+        ];
+        echo json_encode(['code' => 0, 'message' => 'success', 'data' => $defaultHomeNav]);
+        exit;
+    }
+
+    $publicPathPatterns = [
+        '#^admin/v1/auth/login$#',
+        '#^admin/v1/menus$#',
+        '#^app/public/tabbar$#',
+        '#^app/public/home/nav$#',
+        '#^ytb/auth/login-url$#',
+        '#^mobile/v1/wechat/login-url$#',
+        '#^mobile/v1/auth/wechat-url$#',
+        '#^mobile/v1/auth/wechat-callback$#',
+        '#^Tapp/admin/api/wechat/jsconfig\.php$#',
+    ];
+
+    $isPublicPath = false;
+    foreach ($publicPathPatterns as $pattern) {
+        if (preg_match($pattern, $path)) {
+            $isPublicPath = true;
+            break;
+        }
+    }
+
     // 需要认证的接口
-    if (!$token) {
+    if (!$isPublicPath && !$token) {
         http_response_code(401);
         echo json_encode(['code' => 401, 'message' => '未提供认证令牌']);
         exit;
@@ -166,23 +1101,26 @@ try {
     
     // 验证 token
     $tokenData = json_decode(base64_decode($token), true);
-    if (!$tokenData || !isset($tokenData['admin_id']) || !isset($tokenData['exp'])) {
+    if (!$isPublicPath && (!$tokenData || !isset($tokenData['admin_id']) || !isset($tokenData['exp']))) {
         http_response_code(401);
         echo json_encode(['code' => 401, 'message' => '无效的令牌格式']);
         exit;
     }
     
-    if ($tokenData['exp'] < time()) {
+    if (!$isPublicPath && $tokenData['exp'] < time()) {
         http_response_code(401);
         echo json_encode(['code' => 401, 'message' => '令牌已过期']);
         exit;
     }
     
-    $stmt = $db->prepare("SELECT * FROM ytb_admin_users WHERE id = ? AND status = 'active'");
-    $stmt->execute([$tokenData['admin_id']]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    $user = null;
+    if (!$isPublicPath) {
+        $stmt = $db->prepare("SELECT * FROM ytb_admin_users WHERE id = ? AND status = 'active'");
+        $stmt->execute([$tokenData['admin_id']]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    }
     
-    if (!$user) {
+    if (!$isPublicPath && !$user) {
         http_response_code(401);
         echo json_encode(['code' => 401, 'message' => '用户不存在或已禁用']);
         exit;
@@ -257,6 +1195,10 @@ try {
         $stmt->execute([$todayStart]);
         $todayRevenue = (float)$stmt->fetch(PDO::FETCH_ASSOC)['today'] ?? 0;
 
+        $totalDevices = (int)$db->query("SELECT COUNT(*) FROM ytb_devices")->fetchColumn();
+        $onlineDevices = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE network_status = '1'")->fetchColumn();
+        $onlineRate = $totalDevices > 0 ? round($onlineDevices / $totalDevices * 100, 1) : 0;
+
         echo json_encode([
             'code' => 0,
             'message' => '操作成功',
@@ -273,10 +1215,10 @@ try {
                         'today' => $todayRevenue
                     ],
                     'devices' => [
-                        'total' => 0,
-                        'active' => 0,
-                        'online' => 0,
-                        'online_rate' => 0
+                        'total' => $totalDevices,
+                        'active' => (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE status = 'installed'")->fetchColumn(),
+                        'online' => $onlineDevices,
+                        'online_rate' => $onlineRate
                     ]
                 ],
                 'orders' => [
@@ -365,6 +1307,908 @@ try {
             'code' => 0,
             'message' => '操作成功',
             'data' => $chartData
+        ]);
+        exit;
+    }
+
+    // YTB 升级申请列表
+    if ($path === 'admin/v1/ytb/upgrades' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, intval($_GET['per_page'] ?? 15)));
+        $offset = ($page - 1) * $perPage;
+
+        $where = ['1=1'];
+        $params = [];
+
+        // 关键词搜索（用户昵称、手机号、真实姓名）
+        if (!empty($_GET['keyword'])) {
+            $keyword = $_GET['keyword'];
+            $where[] = "(u.nickname LIKE ? OR u.phone LIKE ? OR u.real_name LIKE ?)";
+            $params[] = "%{$keyword}%";
+            $params[] = "%{$keyword}%";
+            $params[] = "%{$keyword}%";
+        }
+
+        // 目标角色筛选
+        if (!empty($_GET['to_role'])) {
+            $where[] = "a.to_role = ?";
+            $params[] = $_GET['to_role'];
+        }
+
+        // 升级方式筛选
+        if (!empty($_GET['upgrade_type'])) {
+            $where[] = "a.upgrade_type = ?";
+            $params[] = $_GET['upgrade_type'];
+        }
+
+        // 审批状态筛选
+        if (!empty($_GET['admin_status'])) {
+            $where[] = "a.admin_status = ?";
+            $params[] = $_GET['admin_status'];
+        }
+
+        // 支付状态筛选
+        if (!empty($_GET['payment_status'])) {
+            $where[] = "a.payment_status = ?";
+            $params[] = $_GET['payment_status'];
+        }
+
+        // 日期范围筛选
+        if (!empty($_GET['start_date'])) {
+            $where[] = "a.created_at >= ?";
+            $params[] = $_GET['start_date'] . ' 00:00:00';
+        }
+        if (!empty($_GET['end_date'])) {
+            $where[] = "a.created_at <= ?";
+            $params[] = $_GET['end_date'] . ' 23:59:59';
+        }
+
+        $whereSql = implode(' AND ', $where);
+
+        // 总数
+        $countSql = "SELECT COUNT(*) as total FROM ytb_upgrade_applications a LEFT JOIN ytb_users u ON a.user_id = u.id WHERE {$whereSql}";
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 排序
+        $orderBy = $_GET['order_by'] ?? 'created_at';
+        $orderDir = $_GET['order_dir'] ?? 'desc';
+        $orderBy = in_array($orderBy, ['created_at', 'updated_at', 'amount']) ? $orderBy : 'created_at';
+        $orderDir = in_array(strtolower($orderDir), ['asc', 'desc']) ? strtoupper($orderDir) : 'DESC';
+
+        // 列表
+        $listSql = "SELECT a.*,
+            u.nickname as user_nickname, u.phone as user_phone, u.real_name as user_real_name, u.role as user_role, u.avatar as user_avatar,
+            i.nickname as inviter_nickname, i.phone as inviter_phone
+            FROM ytb_upgrade_applications a
+            LEFT JOIN ytb_users u ON a.user_id = u.id
+            LEFT JOIN ytb_users i ON a.inviter_id = i.id
+            WHERE {$whereSql}
+            ORDER BY a.{$orderBy} {$orderDir}
+            LIMIT {$offset}, {$perPage}";
+        $listStmt = $db->prepare($listSql);
+        $listStmt->execute($params);
+        $applications = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 角色名称映射
+        $roleNames = [
+            'normal' => '普通用户',
+            'scp' => 'CP伙伴',
+            'team_cp' => 'CP会员',
+            'boss_cp' => 'Boss合伙人',
+        ];
+
+        // 升级方式名称映射
+        $typeNames = [
+            'invite_code' => '邀请码升级',
+            'direct_pay' => '直接付费升级',
+            'achievement' => '业绩达标升级',
+        ];
+
+        // 支付方式名称映射
+        $paymentNames = [
+            'wechat' => '微信支付',
+            'offline' => '线下支付',
+            'free' => '免费',
+        ];
+
+        // 支付状态名称映射
+        $paymentStatusNames = [
+            'pending' => '待支付',
+            'paid' => '已支付',
+            'refunded' => '已退款',
+        ];
+
+        // 审批状态名称映射
+        $adminStatusNames = [
+            'pending' => '待审批',
+            'approved' => '已通过',
+            'rejected' => '已拒绝',
+        ];
+
+        // 处理数据
+        $items = [];
+        foreach ($applications as $app) {
+            $items[] = [
+                'id' => $app['id'],
+                'user_id' => $app['user_id'],
+                'from_role' => $app['from_role'],
+                'to_role' => $app['to_role'],
+                'upgrade_type' => $app['upgrade_type'],
+                'invite_code_used' => $app['invite_code_used'],
+                'inviter_id' => $app['inviter_id'],
+                'amount' => $app['amount'],
+                'payment_method' => $app['payment_method'],
+                'payment_status' => $app['payment_status'],
+                'order_no' => $app['order_no'],
+                'transaction_id' => $app['transaction_id'],
+                'admin_status' => $app['admin_status'],
+                'admin_id' => $app['admin_id'],
+                'admin_remark' => $app['admin_remark'],
+                'achievement_count' => $app['achievement_count'],
+                'paid_at' => $app['paid_at'],
+                'approved_at' => $app['approved_at'],
+                'created_at' => $app['created_at'],
+                'updated_at' => $app['updated_at'],
+                // 关联用户信息
+                'user' => [
+                    'id' => $app['user_id'],
+                    'nickname' => $app['user_nickname'] ?? '',
+                    'phone' => $app['user_phone'] ?? '',
+                    'real_name' => $app['user_real_name'] ?? '',
+                    'role' => $app['user_role'] ?? 'normal',
+                    'avatar' => $app['user_avatar'] ?? '',
+                ],
+                // 邀请人信息
+                'inviter' => $app['inviter_id'] ? [
+                    'id' => $app['inviter_id'],
+                    'nickname' => $app['inviter_nickname'] ?? '',
+                    'phone' => $app['inviter_phone'] ?? '',
+                ] : null,
+                // 名称字段
+                'upgrade_type_name' => $typeNames[$app['upgrade_type']] ?? '未知',
+                'payment_method_name' => $paymentNames[$app['payment_method']] ?? '未知',
+                'payment_status_name' => $paymentStatusNames[$app['payment_status']] ?? '未知',
+                'admin_status_name' => $adminStatusNames[$app['admin_status']] ?? '未知',
+                'to_role_name' => $roleNames[$app['to_role']] ?? '未知',
+                'from_role_name' => $roleNames[$app['from_role']] ?? '未知',
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => [
+                'items' => $items,
+                'total' => $total,
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'last_page' => ceil($total / $perPage),
+            ]
+        ]);
+        exit;
+    }
+
+    // YTB 升级申请统计
+    if ($path === 'admin/v1/ytb/upgrades/statistics' && $method === 'GET') {
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_upgrade_applications");
+        $total = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_upgrade_applications WHERE admin_status = 'pending'");
+        $stmt->execute();
+        $pending = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_upgrade_applications WHERE admin_status = 'approved'");
+        $stmt->execute();
+        $approved = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_upgrade_applications WHERE admin_status = 'rejected'");
+        $stmt->execute();
+        $rejected = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_upgrade_applications WHERE to_role = 'scp'");
+        $stmt->execute();
+        $scpCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_upgrade_applications WHERE to_role = 'team_cp'");
+        $stmt->execute();
+        $teamCpCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_upgrade_applications WHERE payment_status = 'paid'");
+        $stmt->execute();
+        $totalRevenue = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_upgrade_applications WHERE DATE(created_at) = CURDATE()");
+        $stmt->execute();
+        $todayCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => [
+                'total_applications' => $total,
+                'pending_applications' => $pending,
+                'approved_applications' => $approved,
+                'rejected_applications' => $rejected,
+                'scp_applications' => $scpCount,
+                'team_cp_applications' => $teamCpCount,
+                'total_revenue' => $totalRevenue,
+                'today_applications' => $todayCount,
+            ]
+        ]);
+        exit;
+    }
+
+    // YTB 分佣记录列表
+    if ($path === 'admin/v1/ytb/commissions' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, intval($_GET['per_page'] ?? 15)));
+        $offset = ($page - 1) * $perPage;
+
+        $where = ['1=1'];
+        $params = [];
+
+        // 关键词搜索（用户昵称、手机号）
+        if (!empty($_GET['keyword'])) {
+            $keyword = $_GET['keyword'];
+            $where[] = "(u.nickname LIKE ? OR u.phone LIKE ?)";
+            $params[] = "%{$keyword}%";
+            $params[] = "%{$keyword}%";
+        }
+
+        // 分佣状态筛选
+        if (!empty($_GET['status'])) {
+            $where[] = "c.status = ?";
+            $params[] = $_GET['status'];
+        }
+
+        // 分佣类型筛选
+        if (!empty($_GET['commission_type'])) {
+            $where[] = "c.commission_type = ?";
+            $params[] = $_GET['commission_type'];
+        }
+
+        // 日期范围筛选
+        if (!empty($_GET['start_date'])) {
+            $where[] = "c.created_at >= ?";
+            $params[] = $_GET['start_date'] . ' 00:00:00';
+        }
+        if (!empty($_GET['end_date'])) {
+            $where[] = "c.created_at <= ?";
+            $params[] = $_GET['end_date'] . ' 23:59:59';
+        }
+
+        $whereSql = implode(' AND ', $where);
+
+        // 总数
+        $countSql = "SELECT COUNT(*) as total FROM ytb_commissions c LEFT JOIN ytb_users u ON c.user_id = u.id WHERE {$whereSql}";
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 排序
+        $orderBy = $_GET['order_by'] ?? 'created_at';
+        $orderDir = $_GET['order_dir'] ?? 'desc';
+        $orderBy = in_array($orderBy, ['created_at', 'updated_at', 'amount']) ? $orderBy : 'created_at';
+        $orderDir = in_array(strtolower($orderDir), ['asc', 'desc']) ? strtoupper($orderDir) : 'DESC';
+
+        // 列表
+        $listSql = "SELECT c.*,
+            u.nickname as user_nickname, u.phone as user_phone, u.real_name as user_real_name,
+            f.nickname as from_user_nickname, f.phone as from_user_phone
+            FROM ytb_commissions c
+            LEFT JOIN ytb_users u ON c.user_id = u.id
+            LEFT JOIN ytb_users f ON c.from_user_id = f.id
+            WHERE {$whereSql}
+            ORDER BY c.{$orderBy} {$orderDir}
+            LIMIT {$offset}, {$perPage}";
+        $listStmt = $db->prepare($listSql);
+        $listStmt->execute($params);
+        $commissions = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 分佣类型名称映射
+        $typeNames = [
+            'upgrade' => '升级分佣',
+            'install' => '装机分佣',
+            'referral' => '推荐分佣',
+            'boss_refund' => 'Boss退款分佣',
+        ];
+
+        // 状态名称映射
+        $statusNames = [
+            'pending' => '待结算',
+            'settled' => '已结算',
+            'cancelled' => '已取消',
+        ];
+
+        // 处理数据
+        $items = [];
+        foreach ($commissions as $com) {
+            $items[] = [
+                'id' => $com['id'],
+                'user_id' => $com['user_id'],
+                'from_user_id' => $com['from_user_id'],
+                'application_id' => $com['application_id'],
+                'installation_id' => $com['installation_id'],
+                'investment_id' => $com['investment_id'],
+                'amount' => $com['amount'],
+                'commission_type' => $com['commission_type'],
+                'status' => $com['status'],
+                'remark' => $com['remark'],
+                'settled_at' => $com['settled_at'],
+                'created_at' => $com['created_at'],
+                'updated_at' => $com['updated_at'],
+                // 用户信息
+                'user' => [
+                    'id' => $com['user_id'],
+                    'nickname' => $com['user_nickname'] ?? '',
+                    'phone' => $com['user_phone'] ?? '',
+                    'real_name' => $com['user_real_name'] ?? '',
+                ],
+                // 来源用户信息
+                'from_user' => [
+                    'id' => $com['from_user_id'],
+                    'nickname' => $com['from_user_nickname'] ?? '',
+                    'phone' => $com['from_user_phone'] ?? '',
+                ],
+                // 名称字段
+                'commission_type_name' => $typeNames[$com['commission_type']] ?? '未知',
+                'status_name' => $statusNames[$com['status']] ?? '未知',
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => [
+                'items' => $items,
+                'total' => $total,
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'last_page' => ceil($total / $perPage),
+            ]
+        ]);
+        exit;
+    }
+
+    // YTB 分佣统计
+    if ($path === 'admin/v1/ytb/commissions/statistics' && $method === 'GET') {
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_commissions");
+        $total = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_commissions WHERE status = 'pending'");
+        $stmt->execute();
+        $pending = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_commissions WHERE status = 'settled'");
+        $stmt->execute();
+        $settled = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_commissions");
+        $stmt->execute();
+        $totalAmount = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_commissions WHERE status = 'settled'");
+        $stmt->execute();
+        $settledAmount = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_commissions WHERE status = 'pending'");
+        $stmt->execute();
+        $pendingAmount = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => [
+                'total_commissions' => $total,
+                'pending_commissions' => $pending,
+                'settled_commissions' => $settled,
+                'total_amount' => $totalAmount,
+                'settled_amount' => $settledAmount,
+                'pending_amount' => $pendingAmount,
+            ]
+        ]);
+        exit;
+    }
+
+    // YTB 分佣排行榜
+    if ($path === 'admin/v1/ytb/commissions/ranking' && $method === 'GET') {
+        $limit = min(50, max(1, intval($_GET['limit'] ?? 20)));
+
+        $listSql = "SELECT c.user_id, u.nickname, u.phone,
+            COUNT(*) as commission_count,
+            COALESCE(SUM(c.amount), 0) as total_amount,
+            COALESCE(SUM(CASE WHEN c.status = 'settled' THEN c.amount ELSE 0 END), 0) as settled_amount,
+            COALESCE(SUM(CASE WHEN c.status = 'pending' THEN c.amount ELSE 0 END), 0) as pending_amount
+            FROM ytb_commissions c
+            LEFT JOIN ytb_users u ON c.user_id = u.id
+            GROUP BY c.user_id, u.nickname, u.phone
+            ORDER BY total_amount DESC
+            LIMIT {$limit}";
+        $listStmt = $db->query($listSql);
+        $ranking = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $items = [];
+        foreach ($ranking as $index => $item) {
+            $items[] = [
+                'rank' => $index + 1,
+                'user_id' => $item['user_id'],
+                'nickname' => $item['nickname'] ?? '',
+                'phone' => $item['phone'] ?? '',
+                'commission_count' => (int)$item['commission_count'],
+                'total_amount' => (float)$item['total_amount'],
+                'settled_amount' => (float)$item['settled_amount'],
+                'pending_amount' => (float)$item['pending_amount'],
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => $items
+        ]);
+        exit;
+    }
+
+    // YTB BossCP投资列表
+    if ($path === 'admin/v1/ytb/investments' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, intval($_GET['per_page'] ?? 15)));
+        $offset = ($page - 1) * $perPage;
+
+        $where = ['1=1'];
+        $params = [];
+
+        // 关键词搜索（用户昵称、手机号、订单号）
+        if (!empty($_GET['keyword'])) {
+            $keyword = $_GET['keyword'];
+            $where[] = "(u.nickname LIKE ? OR u.phone LIKE ? OR i.order_no LIKE ?)";
+            $params[] = "%{$keyword}%";
+            $params[] = "%{$keyword}%";
+            $params[] = "%{$keyword}%";
+        }
+
+        // 支付状态筛选
+        if (!empty($_GET['payment_status'])) {
+            $where[] = "i.payment_status = ?";
+            $params[] = $_GET['payment_status'];
+        }
+
+        // 状态筛选
+        if (!empty($_GET['status'])) {
+            $where[] = "i.status = ?";
+            $params[] = $_GET['status'];
+        }
+
+        // 日期范围筛选
+        if (!empty($_GET['start_date'])) {
+            $where[] = "i.created_at >= ?";
+            $params[] = $_GET['start_date'] . ' 00:00:00';
+        }
+        if (!empty($_GET['end_date'])) {
+            $where[] = "i.created_at <= ?";
+            $params[] = $_GET['end_date'] . ' 23:59:59';
+        }
+
+        $whereSql = implode(' AND ', $where);
+
+        // 总数
+        $countSql = "SELECT COUNT(*) as total FROM ytb_boss_investments i LEFT JOIN ytb_users u ON i.user_id = u.id WHERE {$whereSql}";
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 排序
+        $orderBy = $_GET['order_by'] ?? 'created_at';
+        $orderDir = $_GET['order_dir'] ?? 'desc';
+        $orderBy = in_array($orderBy, ['created_at', 'updated_at', 'amount']) ? $orderBy : 'created_at';
+        $orderDir = in_array(strtolower($orderDir), ['asc', 'desc']) ? strtoupper($orderDir) : 'DESC';
+
+        // 列表
+        $listSql = "SELECT i.*,
+            u.nickname as user_nickname, u.phone as user_phone, u.real_name as user_real_name,
+            r.nickname as referrer_nickname, r.phone as referrer_phone
+            FROM ytb_boss_investments i
+            LEFT JOIN ytb_users u ON i.user_id = u.id
+            LEFT JOIN ytb_users r ON i.referrer_id = r.id
+            WHERE {$whereSql}
+            ORDER BY i.{$orderBy} {$orderDir}
+            LIMIT {$offset}, {$perPage}";
+        $listStmt = $db->prepare($listSql);
+        $listStmt->execute($params);
+        $investments = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 状态名称映射
+        $statusNames = [
+            'active' => '进行中',
+            'completed' => '已完成',
+            'cancelled' => '已取消',
+        ];
+
+        // 支付状态名称映射
+        $paymentStatusNames = [
+            'pending' => '待支付',
+            'paid' => '已支付',
+            'refunded' => '已退款',
+        ];
+
+        // 支付方式名称映射
+        $paymentMethodNames = [
+            'wechat' => '微信支付',
+            'offline' => '线下支付',
+        ];
+
+        // 处理数据
+        $items = [];
+        foreach ($investments as $inv) {
+            $items[] = [
+                'id' => $inv['id'],
+                'user_id' => $inv['user_id'],
+                'amount' => $inv['amount'],
+                'quota' => $inv['quota'],
+                'remaining_quota' => $inv['remaining_quota'],
+                'refunded_amount' => $inv['refunded_amount'],
+                'status' => $inv['status'],
+                'referrer_reward_paid' => $inv['referrer_reward_paid'],
+                'referrer_reward_amount' => $inv['referrer_reward_amount'],
+                'referrer_id' => $inv['referrer_id'],
+                'order_no' => $inv['order_no'],
+                'transaction_id' => $inv['transaction_id'],
+                'payment_method' => $inv['payment_method'],
+                'payment_status' => $inv['payment_status'],
+                'paid_at' => $inv['paid_at'],
+                'completed_at' => $inv['completed_at'],
+                'created_at' => $inv['created_at'],
+                'updated_at' => $inv['updated_at'],
+                // 用户信息
+                'user' => [
+                    'id' => $inv['user_id'],
+                    'nickname' => $inv['user_nickname'] ?? '',
+                    'phone' => $inv['user_phone'] ?? '',
+                    'real_name' => $inv['user_real_name'] ?? '',
+                ],
+                // 推荐人信息
+                'referrer' => $inv['referrer_id'] ? [
+                    'id' => $inv['referrer_id'],
+                    'nickname' => $inv['referrer_nickname'] ?? '',
+                    'phone' => $inv['referrer_phone'] ?? '',
+                ] : null,
+                // 名称字段
+                'status_name' => $statusNames[$inv['status']] ?? '未知',
+                'payment_status_name' => $paymentStatusNames[$inv['payment_status']] ?? '未知',
+                'payment_method_name' => $paymentMethodNames[$inv['payment_method']] ?? '未知',
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => [
+                'items' => $items,
+                'total' => $total,
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'last_page' => ceil($total / $perPage),
+            ]
+        ]);
+        exit;
+    }
+
+    // YTB BossCP投资统计
+    if ($path === 'admin/v1/ytb/investments/statistics' && $method === 'GET') {
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_boss_investments");
+        $total = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_boss_investments WHERE payment_status = 'paid'");
+        $stmt->execute();
+        $paidCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_boss_investments WHERE payment_status = 'pending'");
+        $stmt->execute();
+        $pendingCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_boss_investments WHERE status = 'active'");
+        $stmt->execute();
+        $activeCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_boss_investments WHERE status = 'completed'");
+        $stmt->execute();
+        $completedCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_boss_investments WHERE payment_status = 'paid'");
+        $stmt->execute();
+        $totalAmount = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_boss_investments WHERE payment_status = 'paid' AND DATE(created_at) = CURDATE()");
+        $stmt->execute();
+        $todayAmount = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => [
+                'total_investments' => $total,
+                'paid_investments' => $paidCount,
+                'pending_investments' => $pendingCount,
+                'active_investments' => $activeCount,
+                'completed_investments' => $completedCount,
+                'total_amount' => $totalAmount,
+                'today_amount' => $todayAmount,
+            ]
+        ]);
+        exit;
+    }
+
+    // YTB 综合统计数据
+    if ($path === 'admin/v1/ytb/statistics' && $method === 'GET') {
+        // 用户统计
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_users");
+        $totalUsers = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_users WHERE role = 'scp'");
+        $scpUsers = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_users WHERE role IN ('team_cp', 'boss_cp')");
+        $teamCpUsers = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_users WHERE role IN ('scp', 'team_cp', 'boss_cp')");
+        $vipUsers = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 升级统计
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_upgrade_applications");
+        $totalUpgrades = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_upgrade_applications WHERE admin_status = 'pending'");
+        $stmt->execute();
+        $pendingUpgrades = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+        // 收入统计
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_upgrade_applications WHERE payment_status = 'paid'");
+        $stmt->execute();
+        $upgradeRevenue = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_boss_investments WHERE payment_status = 'paid'");
+        $stmt->execute();
+        $investmentRevenue = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $totalRevenue = $upgradeRevenue + $investmentRevenue;
+
+        // 本月收入
+        $monthStart = date('Y-m-01 00:00:00');
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_upgrade_applications WHERE payment_status = 'paid' AND paid_at >= ?");
+        $stmt->execute([$monthStart]);
+        $monthUpgradeRevenue = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_boss_investments WHERE payment_status = 'paid' AND paid_at >= ?");
+        $stmt->execute([$monthStart]);
+        $monthInvestmentRevenue = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $totalMonthRevenue = $monthUpgradeRevenue + $monthInvestmentRevenue;
+
+        // 投资统计
+        $stmt = $db->query("SELECT COUNT(*) as total FROM ytb_boss_investments");
+        $totalInvestments = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        // 分佣统计
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_commissions WHERE status = 'settled'");
+        $stmt->execute();
+        $settledCommission = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM ytb_commissions WHERE status = 'pending'");
+        $stmt->execute();
+        $pendingCommission = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => [
+                'users' => [
+                    'total' => $totalUsers,
+                    'vip' => $vipUsers,
+                    'scp' => $scpUsers,
+                    'team_cp' => $teamCpUsers,
+                ],
+                'revenue' => [
+                    'total' => $totalRevenue,
+                    'this_month' => $totalMonthRevenue,
+                    'upgrade' => $upgradeRevenue,
+                    'investment' => $investmentRevenue,
+                ],
+                'commissions' => [
+                    'settled' => $settledCommission,
+                    'pending' => $pendingCommission,
+                ],
+                'upgrades' => [
+                    'total' => $totalUpgrades,
+                    'pending' => $pendingUpgrades,
+                ],
+                'investments' => [
+                    'total' => $totalInvestments,
+                ],
+            ]
+        ]);
+        exit;
+    }
+
+    // YTB 用户增长趋势
+    if ($path === 'admin/v1/ytb/statistics/user-trend' && $method === 'GET') {
+        $days = min(90, max(1, intval($_GET['days'] ?? 30)));
+
+        $chartData = [];
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $date = date('Y-m-d', strtotime("-{$i} days"));
+            $nextDate = date('Y-m-d', strtotime("-{$i} days") + 86400);
+
+            $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_users WHERE created_at >= ? AND created_at < ?");
+            $stmt->execute([$date, $nextDate]);
+            $userCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+            $chartData[] = [
+                'date' => $date,
+                'users' => $userCount,
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => $chartData
+        ]);
+        exit;
+    }
+
+    // YTB 收入趋势
+    if ($path === 'admin/v1/ytb/statistics/revenue-trend' && $method === 'GET') {
+        $days = min(90, max(1, intval($_GET['days'] ?? 30)));
+
+        $chartData = [];
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $date = date('Y-m-d', strtotime("-{$i} days"));
+            $nextDate = date('Y-m-d', strtotime("-{$i} days") + 86400);
+
+            // 升级收入
+            $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as amount FROM ytb_upgrade_applications WHERE payment_status = 'paid' AND paid_at >= ? AND paid_at < ?");
+            $stmt->execute([$date, $nextDate]);
+            $upgradeAmount = (float)$stmt->fetch(PDO::FETCH_ASSOC)['amount'] ?? 0;
+
+            // 投资收入
+            $stmt = $db->prepare("SELECT COALESCE(SUM(amount), 0) as amount FROM ytb_boss_investments WHERE payment_status = 'paid' AND paid_at >= ? AND paid_at < ?");
+            $stmt->execute([$date, $nextDate]);
+            $investmentAmount = (float)$stmt->fetch(PDO::FETCH_ASSOC)['amount'] ?? 0;
+
+            $chartData[] = [
+                'date' => $date,
+                'upgrade' => $upgradeAmount,
+                'investment' => $investmentAmount,
+                'total' => $upgradeAmount + $investmentAmount,
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => $chartData
+        ]);
+        exit;
+    }
+
+    // YTB 升级趋势
+    if ($path === 'admin/v1/ytb/statistics/upgrade-trend' && $method === 'GET') {
+        $days = min(90, max(1, intval($_GET['days'] ?? 30)));
+
+        $chartData = [];
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $date = date('Y-m-d', strtotime("-{$i} days"));
+            $nextDate = date('Y-m-d', strtotime("-{$i} days") + 86400);
+
+            $stmt = $db->prepare("SELECT COUNT(*) as count FROM ytb_upgrade_applications WHERE created_at >= ? AND created_at < ?");
+            $stmt->execute([$date, $nextDate]);
+            $upgradeCount = (int)$stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+            $chartData[] = [
+                'date' => $date,
+                'upgrades' => $upgradeCount,
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => $chartData
+        ]);
+        exit;
+    }
+
+    // YTB TeamCP排行榜（按分佣金额排序，显示所有有分佣的用户）
+    if ($path === 'admin/v1/ytb/statistics/team-cp-ranking' && $method === 'GET') {
+        $limit = min(50, max(1, intval($_GET['limit'] ?? 10)));
+
+        // 查询所有有分佣记录的用户，按分佣金额排序
+        $listSql = "SELECT u.id, u.nickname, u.phone, u.avatar, u.role, u.created_at,
+            (SELECT COUNT(*) FROM ytb_users WHERE parent_id = u.id AND role = 'scp') as direct_scp_count,
+            COALESCE((SELECT SUM(c.amount) FROM ytb_commissions c WHERE c.user_id = u.id AND c.status = 'settled'), 0) as total_commission
+            FROM ytb_users u
+            WHERE u.id IN (SELECT DISTINCT user_id FROM ytb_commissions)
+            ORDER BY total_commission DESC
+            LIMIT {$limit}";
+        $listStmt = $db->query($listSql);
+        $ranking = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $items = [];
+        foreach ($ranking as $index => $item) {
+            $items[] = [
+                'rank' => $index + 1,
+                'user_id' => $item['id'],
+                'nickname' => $item['nickname'] ?? '',
+                'phone' => $item['phone'] ?? '',
+                'avatar' => $item['avatar'] ?? '',
+                'role' => $item['role'] ?? 'scp',
+                'role_name' => $item['role'] === 'team_cp' ? 'CP会员' : ($item['role'] === 'boss_cp' ? 'Boss合伙人' : 'CP伙伴'),
+                'direct_scp_count' => (int)$item['direct_scp_count'],
+                'total_commission' => (float)$item['total_commission'],
+                'created_at' => $item['created_at'],
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => $items
+        ]);
+        exit;
+    }
+
+    // YTB SCP排行榜
+    if ($path === 'admin/v1/ytb/statistics/scp-ranking' && $method === 'GET') {
+        $limit = min(50, max(1, intval($_GET['limit'] ?? 10)));
+
+        $listSql = "SELECT u.id, u.nickname, u.phone, u.avatar, u.role, u.created_at,
+            (SELECT COUNT(*) FROM ytb_users WHERE parent_id = u.id AND role = 'scp') as direct_scp_count,
+            COALESCE((SELECT SUM(c.amount) FROM ytb_commissions c WHERE c.user_id = u.id AND c.status = 'settled'), 0) as total_commission
+            FROM ytb_users u
+            WHERE u.role = 'scp'
+            ORDER BY direct_scp_count DESC
+            LIMIT {$limit}";
+        $listStmt = $db->query($listSql);
+        $ranking = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $items = [];
+        foreach ($ranking as $index => $item) {
+            $items[] = [
+                'rank' => $index + 1,
+                'user_id' => $item['id'],
+                'nickname' => $item['nickname'] ?? '',
+                'phone' => $item['phone'] ?? '',
+                'avatar' => $item['avatar'] ?? '',
+                'role' => $item['role'] ?? 'scp',
+                'role_name' => 'CP伙伴',
+                'direct_scp_count' => (int)$item['direct_scp_count'],
+                'total_commission' => (float)$item['total_commission'],
+                'created_at' => $item['created_at'],
+            ];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => $items
+        ]);
+        exit;
+    }
+
+    // YTB 配置
+    if ($path === 'admin/v1/ytb/configs' && $method === 'GET') {
+        $stmt = $db->query("SELECT `key`, value FROM ytb_configs");
+        $configs = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $configs[$row['key']] = $row['value'];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '获取成功',
+            'data' => $configs
         ]);
         exit;
     }
