@@ -3,6 +3,8 @@
  * YTB 独立管理后台 API 入口
  * 独立部署，不依赖 pay.itapgo.com
  */
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -699,7 +701,107 @@ try {
         exit;
     }
 
-    // YTB 获取邀请码
+    // YTB 设备心跳列表
+    if ($path === 'ytb/devices/heartbeats' && $method === 'GET') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
+        $offset = ($page - 1) * $perPage;
+        $keyword = trim($_GET['keyword'] ?? '');
+
+        $heartbeats = [];
+        $total = 0;
+
+        try {
+            $ytbDevices = [];
+            $ytbStmt = $db->query("SELECT id, device_number FROM ytb_devices WHERE device_number IS NOT NULL AND device_number != ''");
+            while ($row = $ytbStmt->fetch(PDO::FETCH_ASSOC)) {
+                $ytbDevices[$row['device_number']] = $row['id'];
+            }
+
+            if (empty($ytbDevices)) {
+                echo json_encode([
+                    'code' => 0,
+                    'message' => 'ok',
+                    'data' => ['list' => [], 'total' => 0, 'page' => $page, 'per_page' => $perPage]
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $deviceNumbers = array_keys($ytbDevices);
+            $placeholders = implode(", ", array_fill(0, count($deviceNumbers), "?"));
+
+            $keywordCondition = '';
+            $params = $deviceNumbers;
+            if (!empty($keyword)) {
+                $keywordCondition = " AND board_code LIKE ?";
+                $params[] = '%' . $keyword . '%';
+            }
+
+            $countSql = "SELECT COUNT(*) FROM qiyun_device_heartbeats WHERE board_code IN ($placeholders)$keywordCondition";
+            $countStmt = $db->prepare($countSql);
+            $countStmt->execute($params);
+            $total = (int)$countStmt->fetchColumn();
+
+            $offsetInt = (int)$offset;
+            $perPageInt = (int)$perPage;
+            $listSql = "SELECT * FROM qiyun_device_heartbeats WHERE board_code IN ($placeholders)$keywordCondition ORDER BY received_at DESC LIMIT $perPageInt OFFSET $offsetInt";
+            $listStmt = $db->prepare($listSql);
+            $listStmt->execute($params);
+            $rawHeartbeats = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($rawHeartbeats as $hb) {
+                $heartbeats[] = [
+                    'id' => (int)$hb['id'],
+                    'ytb_device_id' => $ytbDevices[$hb['board_code']] ?? 0,
+                    'board_code' => $hb['board_code'],
+                    'f1_flux' => (int)$hb['f1_flux'],
+                    'f1_flux_max' => (int)$hb['f1_flux_max'],
+                    'f2_flux' => (int)$hb['f2_flux'],
+                    'f2_flux_max' => (int)$hb['f2_flux_max'],
+                    'f3_flux' => (int)$hb['f3_flux'],
+                    'f3_flux_max' => (int)$hb['f3_flux_max'],
+                    'f4_flux' => (int)$hb['f4_flux'],
+                    'f4_flux_max' => (int)$hb['f4_flux_max'],
+                    'f5_flux' => (int)$hb['f5_flux'],
+                    'f5_flux_max' => (int)$hb['f5_flux_max'],
+                    'cumulative_filtration_flow' => (float)$hb['cumulative_filtration_flow'],
+                    'surplus_flow' => (float)$hb['surplus_flow'],
+                    'raw_water_tds' => (int)$hb['raw_water_tds'],
+                    'pure_water_tds' => (int)$hb['pure_water_tds'],
+                    'signal_strength' => (int)$hb['signal_strength'],
+                    'is_online' => (bool)$hb['is_online'],
+                    'active_status' => $hb['active_status'],
+                    'service_status' => $hb['service_status'],
+                    'locking_status' => $hb['locking_status'],
+                    'received_at' => $hb['received_at'],
+                ];
+            }
+        } catch (Exception $e) {
+            $total = 0;
+            $heartbeats = [];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => [
+                'list' => $heartbeats,
+                'total' => $total > 0 ? $total : count($heartbeats),
+                'page' => $page,
+                'per_page' => $perPage,
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+        // YTB 获取邀请码
     if ($path === 'ytb/user/invite-code' && $method === 'GET') {
         $user = authenticateYtbUser($db, $token);
         if (!$user) {
@@ -1282,20 +1384,44 @@ try {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user) {
+            // 在更新此用户的 openid 之前，检查是否有其他用户占用了此 openid
+            $checkStmt = $db->prepare('SELECT id FROM ytb_users WHERE openid = ? AND id != ?');
+            $checkStmt->execute([$openid, $user['id']]);
+            $existingOpenidUser = $checkStmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($existingOpenidUser) {
+                // 删除那个刚创建或者无数据的占位新号，以确保能成功绑定到当前手机号的正式账号上
+                $delStmt = $db->prepare('DELETE FROM ytb_users WHERE id = ?');
+                $delStmt->execute([$existingOpenidUser['id']]);
+            }
+
             // 更新该用户的 openid
             $updateStmt = $db->prepare('UPDATE ytb_users SET openid = ?, unionid = COALESCE(unionid, ?), updated_at = NOW() WHERE id = ?');
             $updateStmt->execute([$openid, $unionid, $user['id']]);
         } else {
-            // 创建新用户
-            $nickname = '用户' . substr($phone, -4);
-            $insertStmt = $db->prepare(
-                "INSERT INTO ytb_users (openid, unionid, phone, nickname, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'normal', 'active', NOW(), NOW())"
-            );
-            $insertStmt->execute([$openid, $unionid, $phone, $nickname]);
-            
-            $stmt = $db->prepare('SELECT * FROM ytb_users WHERE id = ? LIMIT 1');
-            $stmt->execute([$db->lastInsertId()]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            // 这个手机号完全没有记录，但是也要考虑到刚才他走普通的登录是否创建了一个只有 openid 的小号
+            $chkStmt = $db->prepare('SELECT * FROM ytb_users WHERE openid = ? LIMIT 1');
+            $chkStmt->execute([$openid]);
+            $userByOpenid = $chkStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($userByOpenid) {
+                // 他已经有个小号了，直接给这个小号补充手机号即可
+                $updateStmt = $db->prepare('UPDATE ytb_users SET phone = ?, unionid = COALESCE(unionid, ?), updated_at = NOW() WHERE id = ?');
+                $updateStmt->execute([$phone, $unionid, $userByOpenid['id']]);
+                $user = $userByOpenid;
+                $user['phone'] = $phone;
+            } else {
+                // 创建全新用户
+                $nickname = '用户' . substr($phone, -4);
+                $insertStmt = $db->prepare(
+                    "INSERT INTO ytb_users (openid, unionid, phone, nickname, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'normal', 'active', NOW(), NOW())"
+                );
+                $insertStmt->execute([$openid, $unionid, $phone, $nickname]);
+                
+                $stmt = $db->prepare('SELECT * FROM ytb_users WHERE id = ? LIMIT 1');
+                $stmt->execute([$db->lastInsertId()]);
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
         }
 
         // 生成Token
