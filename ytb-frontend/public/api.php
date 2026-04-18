@@ -1178,6 +1178,155 @@ try {
         exit;
     }
     
+    // 小程序微信登录
+    if ($path === 'ytb/miniapp-login' && $method === 'POST') {
+        $code = $input['code'] ?? '';
+        if (!$code) {
+            http_response_code(400);
+            echo json_encode(['code' => 400, 'message' => '缺少微信授权码']);
+            exit;
+        }
+
+        $appId = 'wx5643a45f1e914b29';
+        $appSecret = 'd43623e961bd5459f6b3eb1f5130cc30';
+        $url = "https://api.weixin.qq.com/sns/jscode2session?appid={$appId}&secret={$appSecret}&js_code={$code}&grant_type=authorization_code";
+        
+        $res = wechatApiGetJson($url);
+        if (!$res || !empty($res['errcode']) || empty($res['openid'])) {
+            http_response_code(400);
+            echo json_encode(['code' => 400, 'message' => '微信授权失败']);
+            exit;
+        }
+
+        $wechatUser = [
+            'openid' => $res['openid'],
+            'unionid' => $res['unionid'] ?? null,
+            'nickname' => '微信用户',
+            'headimgurl' => '',
+        ];
+
+        $user = saveYtbUserByWechat($db, $wechatUser);
+        if ($user && !empty($user['api_token'])) {
+            $payloadUser = [
+                'id' => (int)($user['id'] ?? 0),
+                'userId' => (int)($user['id'] ?? 0),
+                'nickname' => $user['nickname'] ?? '',
+                'name' => $user['nickname'] ?? '',
+                'phone' => $user['phone'] ?? '',
+                'role' => $user['role'] ?? 'user',
+                'avatar' => $user['avatar'] ?? '',
+                'openid' => $user['openid'] ?? '',
+                'unionid' => $user['unionid'] ?? '',
+            ];
+
+            echo json_encode([
+                'code' => 0,
+                'message' => '登录成功',
+                'data' => [
+                    'token' => $user['api_token'],
+                    'user' => $payloadUser,
+                ],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        http_response_code(500);
+        echo json_encode(['code' => 500, 'message' => '登录异常']);
+        exit;
+    }
+
+    // 小程序手机号快捷登录
+    if ($path === 'ytb/miniapp-phone-login' && $method === 'POST') {
+        $code = $input['code'] ?? '';
+        $encryptedData = $input['encryptedData'] ?? '';
+        $iv = $input['iv'] ?? '';
+        
+        if (!$code || !$encryptedData || !$iv) {
+            http_response_code(400);
+            echo json_encode(['code' => 400, 'message' => '缺少必要参数']);
+            exit;
+        }
+
+        $appId = 'wx5643a45f1e914b29';
+        $appSecret = 'd43623e961bd5459f6b3eb1f5130cc30';
+        $url = "https://api.weixin.qq.com/sns/jscode2session?appid={$appId}&secret={$appSecret}&js_code={$code}&grant_type=authorization_code";
+        
+        $res = wechatApiGetJson($url);
+        if (!$res || !empty($res['errcode']) || empty($res['session_key'])) {
+            http_response_code(400);
+            echo json_encode(['code' => 400, 'message' => '获取会话密钥失败']);
+            exit;
+        }
+
+        // 解密手机号
+        $sessionKey = $res['session_key'];
+        $aesKey = base64_decode($sessionKey);
+        $aesIV = base64_decode($iv);
+        $aesCipher = base64_decode($encryptedData);
+        $decrypted = openssl_decrypt($aesCipher, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $aesIV);
+        $data = json_decode($decrypted, true);
+        
+        $phone = $data['phoneNumber'] ?? '';
+        if (!$phone) {
+            http_response_code(400);
+            echo json_encode(['code' => 400, 'message' => '手机号解密失败']);
+            exit;
+        }
+
+        $openid = $res['openid'];
+        $unionid = $res['unionid'] ?? null;
+
+        // 尝试通过手机号找回用户
+        $stmt = $db->prepare('SELECT * FROM ytb_users WHERE phone = ? LIMIT 1');
+        $stmt->execute([$phone]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($user) {
+            // 更新该用户的 openid
+            $updateStmt = $db->prepare('UPDATE ytb_users SET openid = ?, unionid = COALESCE(unionid, ?), updated_at = NOW() WHERE id = ?');
+            $updateStmt->execute([$openid, $unionid, $user['id']]);
+        } else {
+            // 创建新用户
+            $nickname = '用户' . substr($phone, -4);
+            $insertStmt = $db->prepare(
+                "INSERT INTO ytb_users (openid, unionid, phone, nickname, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'normal', 'active', NOW(), NOW())"
+            );
+            $insertStmt->execute([$openid, $unionid, $phone, $nickname]);
+            
+            $stmt = $db->prepare('SELECT * FROM ytb_users WHERE id = ? LIMIT 1');
+            $stmt->execute([$db->lastInsertId()]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
+
+        // 生成Token
+        $apiToken = bin2hex(random_bytes(24));
+        $tokenExpiresAt = date('Y-m-d H:i:s', time() + 30 * 24 * 60 * 60);
+
+        $tokenStmt = $db->prepare('UPDATE ytb_users SET api_token = ?, token_expires_at = ?, updated_at = NOW() WHERE id = ?');
+        $tokenStmt->execute([$apiToken, $tokenExpiresAt, $user['id']]);
+
+        $payloadUser = [
+            'id' => (int)($user['id'] ?? 0),
+            'userId' => (int)($user['id'] ?? 0),
+            'nickname' => $user['nickname'] ?? '',
+            'name' => $user['nickname'] ?? '',
+            'phone' => $user['phone'] ?? '',
+            'role' => $user['role'] ?? 'user',
+            'avatar' => $user['avatar'] ?? '',
+            'openid' => $openid,
+        ];
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '手机号登录成功',
+            'data' => [
+                'token' => $apiToken,
+                'user' => $payloadUser,
+            ],
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    
     // 登录
     if ($path === 'admin/v1/auth/login' && $method === 'POST') {
         $username = $input['username'] ?? '';
@@ -1269,6 +1418,8 @@ try {
         '#^mobile/v1/auth/wechat-url$#',
         '#^mobile/v1/auth/wechat-callback$#',
         '#^Tapp/admin/api/wechat/jsconfig\.php$#',
+        '#^ytb/miniapp-login$#',
+        '#^ytb/miniapp-phone-login$#',
     ];
 
     $isPublicPath = false;
