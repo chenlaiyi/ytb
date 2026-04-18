@@ -198,6 +198,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { setShareMetadata } from '@/utils/share';
 import { showToast, showSuccessToast, showLoadingToast, closeToast, showDialog, showConfirmDialog } from 'vant';
 import { useUserStore } from '@/stores/user';
+import { payInstallFee } from '@/api/installation';
 
 const route = useRoute();
 const router = useRouter();
@@ -1113,22 +1114,38 @@ const simulatePayment = () => {
     });
 
     // 模拟短暂延迟
-    setTimeout(() => {
-      // 清除加载提示
-      closeToast(); // 使用closeToast替代showToast.clear
+    setTimeout(async () => {
+      try {
+        if (!bookingId.value.startsWith('temp_')) {
+          await payInstallFee(bookingId.value);
+        }
+        
+        // 清除加载提示
+        closeToast(); 
 
-      // 显示成功提示
-      showSuccessToast('支付成功');
+        // 显示成功提示
+        showSuccessToast('支付成功');
 
-      // 更新预约状态
-      bookingInfo.value.payment_status = 'paid';
-      bookingInfo.value.payment_time = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        // 更新预约状态
+        bookingInfo.value.payment_status = 'paid';
+        bookingInfo.value.payment_time = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-      // 重置处理状态
-      isProcessing.value = false;
-      isRequestSent.value = false;
+        // 重置处理状态
+        isProcessing.value = false;
+        isRequestSent.value = false;
 
-      console.log('[BookingPayment] 模拟支付成功完成');
+        console.log('[BookingPayment] 模拟支付成功完成');
+        
+        // 支付完成后跳转回设备列表或者工单列表
+        setTimeout(() => {
+          router.replace('/devices');
+        }, 1500);
+      } catch (e) {
+        closeToast();
+        showToast(e.message || '模拟支付后端调用失败');
+        isProcessing.value = false;
+        isRequestSent.value = false;
+      }
     }, 1500);
   }).catch(() => {
     console.log('[BookingPayment] 用户取消模拟支付');

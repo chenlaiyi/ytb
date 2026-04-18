@@ -71,7 +71,7 @@
         </div>
 
         <!-- 工程师操作 -->
-        <div class="action-card" v-if="workOrder.status === 'pending'">
+        <div class="action-card" v-if="workOrder.status === 'paid'">
           <div class="card-title">操作</div>
           <div class="action-buttons">
             <van-button 
@@ -85,56 +85,65 @@
           </div>
         </div>
 
-        <div class="action-card" v-else-if="workOrder.status === 'accepted' || workOrder.status === 'in_progress'">
+        <div class="action-card" v-else-if="workOrder.status === 'accepted' || workOrder.status === 'picked' || workOrder.status === 'installing'">
           <div class="card-title">操作</div>
           <div class="action-buttons">
             <van-button 
               type="primary" 
               block 
-              @click="startWork"
+              @click="showPickDialog = true"
               :loading="startLoading"
               v-if="workOrder.status === 'accepted'"
             >
-              开始工作
+              领机扫码(登记主板号)
+            </van-button>
+            <van-button 
+              type="primary" 
+              block 
+              @click="showAccessoryDialog = true"
+              :loading="startLoading"
+              v-if="workOrder.status === 'picked'"
+            >
+              录入配件费并开始安装
             </van-button>
             <van-button 
               type="success" 
               block 
               @click="showCompleteDialog = true"
-              v-if="workOrder.status === 'in_progress'"
+              v-if="workOrder.status === 'installing'"
             >
-              完成工单
+              提交水质检测(完成)
             </van-button>
           </div>
         </div>
 
-        <!-- 工单进度 -->
-        <div class="progress-card" v-if="workOrder.status !== 'pending'">
-          <div class="card-title">工单进度</div>
-          <van-steps :active="getStepActive(workOrder.status)" direction="vertical">
-            <van-step>工单已接单</van-step>
-            <van-step>工程师出发</van-step>
-            <van-step>开始安装</van-step>
-            <van-step>完成安装</van-step>
-          </van-steps>
-        </div>
-
-        <!-- 完成信息 -->
-        <div class="completion-card" v-if="workOrder.status === 'completed' && workOrder.completion_note">
-          <div class="card-title">完成信息</div>
-          <div class="completion-info">
+        <!-- 费用信息 -->
+        <div class="customer-card" v-if="workOrder.status === 'installing' || workOrder.status === 'completed'">
+          <div class="card-title">配件与费用信息</div>
+          <div class="customer-info" v-if="workOrder.accessory_order_id">
             <div class="info-item">
-              <div class="info-label">完成时间</div>
-              <div class="info-value">{{ workOrder.completion_time }}</div>
+              <div class="info-label">配件费</div>
+              <div class="info-value">¥{{ workOrder.accessory?.total_amount || 0 }} ({{ workOrder.accessory_paid ? '已支付' : '待用户支付' }})</div>
             </div>
+          </div>
+          <div class="customer-info" v-else>
             <div class="info-item">
-              <div class="info-label">完成说明</div>
-              <div class="info-value">{{ workOrder.completion_note }}</div>
+              <div class="info-label">配件</div>
+              <div class="info-value">无额外配件产生</div>
             </div>
           </div>
         </div>
 
-        <!-- 照片上传 -->
+        <!-- 工单进度 -->
+        <div class="progress-card" v-if="workOrder.status !== 'paid'">
+          <div class="card-title">工单进度</div>
+          <van-steps :active="getStepActive(workOrder.status)" direction="vertical">
+            <van-step>已接单</van-step>
+            <van-step>已领机</van-step>
+            <van-step>安装中</van-step>
+            <van-step>完成安装</van-step>
+          </van-steps>
+        </div>
         <div class="photo-card" v-if="workOrder.status === 'in_progress' || workOrder.status === 'completed'">
           <div class="card-title">工作照片</div>
           <div class="photo-upload">
@@ -170,22 +179,64 @@
       </div>
     </PullRefresh>
 
-    <!-- 完成工单弹窗 -->
+    <!-- 领机弹窗 -->
+    <van-dialog 
+      v-model:show="showPickDialog" 
+      title="领机扫码" 
+      show-cancel-button
+      @confirm="submitPick"
+    >
+      <div class="complete-dialog-content">
+        <van-field
+          v-model="boardCode"
+          label="主板号"
+          placeholder="请输入或扫码主板号"
+        >
+          <template #button>
+            <van-button size="small" type="primary" @click="scanQRCode">扫码</van-button>
+          </template>
+        </van-field>
+      </div>
+    </van-dialog>
+
+    <!-- 配件与费用弹窗 -->
+    <van-dialog 
+      v-model:show="showAccessoryDialog" 
+      title="录入配件(可选)" 
+      show-cancel-button
+      @confirm="submitAccessory"
+    >
+      <div class="complete-dialog-content">
+        <van-field
+          v-model="accessoryAmount"
+          label="额外配件费"
+          type="number"
+          placeholder="无额外配件留空或0"
+        />
+        <van-field
+          v-model="accessoryNote"
+          rows="2"
+          autosize
+          type="textarea"
+          label="配件明细"
+          placeholder="如: PPR管x2, 三通x1"
+        />
+      </div>
+    </van-dialog>
+
+    <!-- 提交水质检测弹窗 -->
     <van-dialog 
       v-model:show="showCompleteDialog" 
-      title="完成工单" 
+      title="水质检测提交" 
       show-cancel-button
       @confirm="completeOrder"
       :before-close="beforeCompleteClose"
     >
       <div class="complete-dialog-content">
-        <van-field
-          v-model="completionNote"
-          rows="3"
-          autosize
-          type="textarea"
-          placeholder="请输入完成说明..."
-        />
+        <van-field v-model="waterTest.tds_before" label="原水TDS" type="digit" placeholder="原水TDS值" />
+        <van-field v-model="waterTest.tds_after" label="净水TDS" type="digit" placeholder="净水TDS值" />
+        <van-field v-model="waterTest.chlorine_before" label="原水余氯" type="number" placeholder="例如: 0.5" />
+        <van-field v-model="waterTest.chlorine_after" label="净水余氯" type="number" placeholder="例如: 0.0" />
       </div>
     </van-dialog>
   </div>
@@ -195,66 +246,22 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PullRefresh, Icon as VanIcon, Button as VanButton, Steps as VanSteps, Step as VanStep, Uploader as VanUploader, Image as VanImage, Dialog as VanDialog, Field as VanField, Toast } from 'vant'
-import { getWorkOrderDetail, acceptWorkOrder, completeWorkOrder, uploadWorkOrderPhoto } from '@/api/engineer'
+import { pickWorkOrder, submitAccessories } from '@/api/engineer'
 
-const route = useRoute()
-const router = useRouter()
+// ... existing refs
+const showPickDialog = ref(false)
+const boardCode = ref('')
 
-// 页面状态
-const loading = ref(false)
-const refreshing = ref(false)
-const acceptLoading = ref(false)
-const startLoading = ref(false)
+const showAccessoryDialog = ref(false)
+const accessoryAmount = ref('')
+const accessoryNote = ref('')
 
-// 工单数据
-const workOrder = ref(null)
-
-// 照片相关
-const photoList = ref([])
-const uploadedPhotos = ref([])
-
-// 完成工单相关
-const showCompleteDialog = ref(false)
-const completionNote = ref('')
-
-// 页面加载时获取工单详情
-onMounted(() => {
-  const orderId = route.params.id
-  if (orderId) {
-    fetchWorkOrderDetail(orderId)
-  }
+const waterTest = ref({
+  tds_before: '',
+  tds_after: '',
+  chlorine_before: '',
+  chlorine_after: ''
 })
-
-// 获取工单详情
-const fetchWorkOrderDetail = async (orderId) => {
-  try {
-    loading.value = true
-    const res = await getWorkOrderDetail(orderId)
-    if (res.code === 0) {
-      workOrder.value = res.data
-      // 如果有已上传的照片，初始化照片列表
-      if (workOrder.value.images && workOrder.value.images.length > 0) {
-        uploadedPhotos.value = workOrder.value.images
-      }
-    } else {
-      Toast.fail(res.message || '获取工单详情失败')
-    }
-  } catch (error) {
-    console.error('获取工单详情失败:', error)
-    Toast.fail('获取工单详情失败')
-  } finally {
-    loading.value = false
-    refreshing.value = false
-  }
-}
-
-// 下拉刷新
-const onRefresh = () => {
-  const orderId = route.params.id
-  if (orderId) {
-    fetchWorkOrderDetail(orderId)
-  }
-}
 
 // 接受工单
 const acceptOrder = async () => {
@@ -263,7 +270,6 @@ const acceptOrder = async () => {
     const res = await acceptWorkOrder(workOrder.value.id)
     if (res.code === 0) {
       Toast.success('接单成功')
-      // 更新工单状态
       workOrder.value.status = 'accepted'
     } else {
       Toast.fail(res.message || '接单失败')
@@ -276,16 +282,53 @@ const acceptOrder = async () => {
   }
 }
 
-// 开始工作
-const startWork = async () => {
+// 领机扫码
+const scanQRCode = () => {
+  // TODO: Call Wechat JS-SDK scan
+  Toast('请在此手动输入扫码内容')
+}
+
+const submitPick = async () => {
+  if (!boardCode.value.trim()) {
+    Toast.fail('主板号不能为空')
+    return
+  }
   try {
     startLoading.value = true
-    // 这里应该调用开始工作的API，暂时直接更新状态
-    workOrder.value.status = 'in_progress'
-    Toast.success('开始工作')
+    const res = await pickWorkOrder(workOrder.value.id, { board_code: boardCode.value })
+    if (res.code === 0) {
+      Toast.success('领机成功')
+      workOrder.value.status = 'picked'
+      showPickDialog.value = false
+    } else {
+      Toast.fail(res.message || '领机失败')
+    }
   } catch (error) {
-    console.error('开始工作失败:', error)
-    Toast.fail('开始工作失败')
+    Toast.fail('领机失败')
+  } finally {
+    startLoading.value = false
+  }
+}
+
+// 提交配件开始安装
+const submitAccessory = async () => {
+  try {
+    startLoading.value = true
+    const items = []
+    if (accessoryNote.value.trim()) {
+      items.push({ name: '附加配件/服务', qty: 1, price: accessoryAmount.value || 0, remark: accessoryNote.value })
+    }
+    const res = await submitAccessories(workOrder.value.id, { items })
+    if (res.code === 0) {
+      Toast.success('已开始安装')
+      workOrder.value.status = 'installing'
+      showAccessoryDialog.value = false
+      fetchWorkOrderDetail(workOrder.value.id)
+    } else {
+      Toast.fail(res.message || '提交失败')
+    }
+  } catch (error) {
+    Toast.fail('提交失败')
   } finally {
     startLoading.value = false
   }
@@ -294,8 +337,8 @@ const startWork = async () => {
 // 完成工单前的确认
 const beforeCompleteClose = (action, done) => {
   if (action === 'confirm') {
-    if (!completionNote.value.trim()) {
-      Toast.fail('请输入完成说明')
+    if (!waterTest.value.tds_before || !waterTest.value.tds_after) {
+      Toast.fail('请填写TDS值')
       done(false)
       return
     }
@@ -303,26 +346,18 @@ const beforeCompleteClose = (action, done) => {
   done()
 }
 
-// 完成工单
+// 完成工单(提交水质检测)
 const completeOrder = async () => {
   try {
-    const res = await completeWorkOrder(workOrder.value.id, {
-      completion_note: completionNote.value,
-      completion_time: new Date().toISOString()
-    })
+    const res = await completeWorkOrder(workOrder.value.id, waterTest.value)
     if (res.code === 0) {
-      Toast.success('工单完成')
+      Toast.success('水质检测提交成功, 安装完成')
       showCompleteDialog.value = false
-      completionNote.value = ''
-      // 更新工单状态
       workOrder.value.status = 'completed'
-      workOrder.value.completion_note = completionNote.value
-      workOrder.value.completion_time = new Date().toISOString()
     } else {
       Toast.fail(res.message || '完成工单失败')
     }
   } catch (error) {
-    console.error('完成工单失败:', error)
     Toast.fail('完成工单失败')
   }
 }
@@ -338,27 +373,19 @@ const beforeRead = (file) => {
 // 照片读取后的处理
 const afterRead = async (file) => {
   try {
-    // 创建FormData对象
     const formData = new FormData()
     formData.append('photo', file.file)
-    
-    // 上传照片
     const res = await uploadWorkOrderPhoto(workOrder.value.id, formData)
     if (res.code === 0) {
       Toast.success('上传成功')
-      // 添加到已上传照片列表
       uploadedPhotos.value.push(res.data.url)
-      // 清空上传列表
       photoList.value = []
     } else {
       Toast.fail(res.message || '上传失败')
-      // 移除上传失败的文件
       photoList.value = photoList.value.filter(item => item !== file)
     }
   } catch (error) {
-    console.error('上传照片失败:', error)
     Toast.fail('上传失败')
-    // 移除上传失败的文件
     photoList.value = photoList.value.filter(item => item !== file)
   }
 }
@@ -366,9 +393,10 @@ const afterRead = async (file) => {
 // 获取状态样式
 const getStatusClass = (status) => {
   const statusMap = {
-    'pending': 'status-pending',
+    'paid': 'status-pending',
     'accepted': 'status-accepted',
-    'in_progress': 'status-processing',
+    'picked': 'status-processing',
+    'installing': 'status-processing',
     'completed': 'status-completed',
     'cancelled': 'status-cancelled'
   }
@@ -378,10 +406,11 @@ const getStatusClass = (status) => {
 // 获取状态文本
 const getStatusText = (status) => {
   const statusMap = {
-    'pending': '待接单',
-    'accepted': '已接单',
-    'in_progress': '处理中',
-    'completed': '已完成',
+    'paid': '待接单',
+    'accepted': '待领机',
+    'picked': '待安装',
+    'installing': '安装中(待检测)',
+    'completed': '已完成(待激活)',
     'cancelled': '已取消'
   }
   return statusMap[status] || '未知'
@@ -390,8 +419,9 @@ const getStatusText = (status) => {
 // 获取步骤激活状态
 const getStepActive = (status) => {
   const stepMap = {
-    'accepted': 1,
-    'in_progress': 2,
+    'accepted': 0,
+    'picked': 1,
+    'installing': 2,
     'completed': 3
   }
   return stepMap[status] || 0

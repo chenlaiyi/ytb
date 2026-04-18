@@ -1,0 +1,258 @@
+/**
+ * 全局弹窗修复样式
+ * 解决白色空白弹窗问题
+ */
+
+/* 确保弹窗内容可见 */
+.van-dialog,
+.van-popup {
+  background-color: #ffffff !important;
+  color: #323233 !important;
+  overflow: visible !important;
+  z-index: 2001 !important;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 12px !important;
+}
+
+/* 弹窗标题 */
+.van-dialog__header,
+.popup-header {
+  padding: 20px 20px 10px !important;
+  font-weight: 600 !important;
+  color: #323233 !important;
+  font-size: 16px !important;
+  text-align: center !important;
+}
+
+/* 弹窗内容 */
+.van-dialog__content,
+.van-dialog__message,
+.popup-content {
+  padding: 8px 20px 20px !important;
+  color: #323233 !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+  text-align: center !important;
+}
+
+/* 弹窗按钮 */
+.van-dialog__footer {
+  padding: 8px !important;
+  display: flex !important;
+}
+
+.van-dialog__confirm, 
+.van-dialog__cancel {
+  height: 44px !important;
+  font-size: 16px !important;
+  flex: 1 !important;
+}
+
+/* 确保弹窗遮罩层可见 */
+.van-overlay {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+  z-index: 2000 !important;
+}
+
+/* 修复微信调试弹窗 */
+.wx_profile_dialog_primary,
+.weui-dialog,
+.wx_profile_dialog_wrp {
+  display: none !important;
+}
+
+/* 修复Toast样式 */
+.van-toast {
+  background-color: rgba(50, 50, 50, 0.9) !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  padding: 12px 20px !important;
+  border-radius: 8px !important;
+  z-index: 2099 !important;
+  max-width: 80% !important;
+  min-width: 120px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* 加载状态的Toast */
+.van-toast--loading {
+  padding: 20px !important;
+  background-color: rgba(0, 0, 0, 0.75) !important;
+}
+
+/* 成功状态的Toast */
+.van-toast--success {
+  background-color: rgba(40, 170, 80, 0.9) !important;
+}
+
+/* 失败状态的Toast */
+.van-toast--fail {
+  background-color: rgba(240, 50, 50, 0.9) !important;
+}
+
+/* 底部弹出层 */
+.van-popup--bottom {
+  border-radius: 16px 16px 0 0 !important;
+}
+
+/* 顶部弹出层 */
+.van-popup--top {
+  border-radius: 0 0 16px 16px !important;
+}
+
+/* 确保弹窗内的表单元素可见 */
+.van-field__control {
+  color: #323233 !important;
+}
+
+.van-field__control::placeholder {
+  color: #969799 !important;
+}
+
+/* 确保弹窗内的按钮可见 */
+.van-button--default {
+  color: #323233 !important;
+}
+
+.van-button--primary {
+  background-color: #1989fa !important;
+  color: #ffffff !important;
+}
+
+/* 修复Picker样式 */
+.van-picker {
+  background-color: #ffffff !important;
+}
+
+.van-picker__confirm,
+.van-picker__cancel {
+  color: #323233 !important;
+}
+
+.van-picker__confirm {
+  color: #1989fa !important;
+}
+
+/* 修复日期选择器样式 */
+.van-datetime-picker {
+  background-color: #ffffff !important;
+}
+
+/* 修复地址选择器样式 */
+.van-address-edit {
+  background-color: #ffffff !important;
+}
+
+/* 修复自定义弹窗样式 */
+.custom-dialog-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2001;
+}
+
+.custom-dialog-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.custom-dialog {
+  position: relative;
+  width: 85%;
+  max-width: 320px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 2002;
+}
+
+.custom-dialog-header {
+  padding: 20px 20px 10px;
+  font-weight: 600;
+  color: #323233;
+  font-size: 16px;
+  text-align: center;
+}
+
+.custom-dialog-content {
+  padding: 8px 20px 20px;
+  color: #323233;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.custom-dialog-footer {
+  display: flex;
+  height: 48px;
+  border-top: 1px solid #ebedf0;
+}
+
+.custom-dialog-cancel,
+.custom-dialog-confirm {
+  flex: 1;
+  height: 48px;
+  border: none;
+  background-color: #ffffff;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.custom-dialog-cancel {
+  border-right: 1px solid #ebedf0;
+}
+
+.custom-dialog-footer-single .custom-dialog-confirm {
+  width: 100%;
+}
+
+/* 自定义Toast样式 */
+.custom-toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 12px 20px;
+  background-color: rgba(50, 50, 50, 0.9);
+  color: #ffffff;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  z-index: 2099;
+  max-width: 80%;
+  min-width: 120px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.custom-toast-success {
+  background-color: rgba(40, 170, 80, 0.9);
+}
+
+.custom-toast-fail {
+  background-color: rgba(240, 50, 50, 0.9);
+}
+
+.custom-toast-loading {
+  padding: 20px;
+  background-color: rgba(0, 0, 0, 0.75);
+}
+
+.custom-toast-icon {
+  display: block;
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.custom-toast-message {
+  font-size: 14px;
+  line-height: 1.5;
+}

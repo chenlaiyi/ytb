@@ -427,7 +427,7 @@ const routesConfig = [
                         path: 'app-users',
                         name: 'AppUsers',
                         component: () => import('../views/users/app-users/List.vue'),
-                        meta: { title: 'APP用户', icon: 'user' }
+                        meta: { title: '用户', icon: 'user' }
                     },
                     // 准客户管理
                     {
@@ -905,6 +905,24 @@ const routesConfig = [
                         name: 'WaterPointEdit',
                         component: () => import('../views/devices/water-points/Edit.vue'),
                         meta: { title: '编辑取水点', icon: 'edit' }
+                    },
+                    {
+                        path: 'heartbeat',
+                        name: 'DevicesHeartbeat',
+                        component: () => import('../views/devices/Heartbeat.vue'),
+                        meta: { title: '心跳', icon: 'Bell' }
+                    },
+                    {
+                        path: 'packages',
+                        name: 'DevicesPackages',
+                        component: () => import('../views/water-purifier/Packages.vue'),
+                        meta: { title: '套餐管理', icon: 'ShoppingBag' }
+                    },
+                    {
+                        path: 'package-orders',
+                        name: 'DevicesPackageOrders',
+                        component: () => import('../views/devices/DevicePackageOrders.vue'),
+                        meta: { title: '套餐订单', icon: 'Tickets' }
                     }
                 ]
             },
@@ -1397,6 +1415,12 @@ const routesConfig = [
                         name: 'FinanceMeituanWithdraw',
                         component: () => import('../views/finance/MeituanWithdraw.vue'),
                         meta: { title: '美团提现', icon: 'Coin' }
+                    },
+                    {
+                        path: ':subPath',
+                        name: 'FinancePlaceholder',
+                        component: () => import('../views/finance/Index.vue'),
+                        meta: { title: '财务', icon: 'Money' }
                     }
                 ]
             },

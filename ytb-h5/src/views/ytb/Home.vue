@@ -202,7 +202,7 @@ const upgradeTitle = computed(() => {
 // 初始化
 onMounted(async () => {
   if (!isLoggedIn()) {
-    router.replace('/ytb/login')
+    router.replace('/login')
     return
   }
 
@@ -290,13 +290,13 @@ const handleAvatarError = (e) => {
 }
 
 // 页面跳转
-const goToProfile = () => router.push('/ytb/profile')
-const goToUpgrade = () => router.push('/ytb/upgrade')
-const goToTeam = () => router.push('/ytb/team')
-const goToCommission = () => router.push('/ytb/commission')
-const goToApplications = () => router.push('/ytb/applications')
-const goToInvestment = () => router.push('/ytb/investment')
-const goToInstallations = () => router.push('/ytb/installations')
+const goToProfile = () => router.push('/profile')
+const goToUpgrade = () => router.push('/upgrade')
+const goToTeam = () => router.push('/team')
+const goToCommission = () => router.push('/commission')
+const goToApplications = () => router.push('/applications')
+const goToInvestment = () => router.push('/investment')
+const goToInstallations = () => router.push('/installations')
 </script>
 
 <style scoped>

@@ -1,0 +1,26 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="merchantGradient" x1="20" y1="15" x2="100" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4C8DFF" />
+      <stop offset="100%" stop-color="#2B6DE5" />
+    </linearGradient>
+    <linearGradient id="merchantAccent" x1="40" y1="45" x2="80" y2="95" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E5EEFF" />
+      <stop offset="100%" stop-color="#C9DCFF" />
+    </linearGradient>
+    <clipPath id="clipCircle">
+      <circle cx="60" cy="60" r="52" />
+    </clipPath>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="#F4F7FF" />
+  <g clip-path="url(#clipCircle)">
+    <rect x="12" y="26" width="96" height="76" rx="18" fill="url(#merchantGradient)" />
+    <rect x="24" y="46" width="72" height="52" rx="12" fill="url(#merchantAccent)" />
+    <rect x="36" y="58" width="12" height="28" rx="4" fill="#4C8DFF" opacity="0.75" />
+    <rect x="56" y="58" width="12" height="28" rx="4" fill="#4C8DFF" opacity="0.55" />
+    <rect x="76" y="58" width="12" height="28" rx="4" fill="#4C8DFF" opacity="0.35" />
+    <path d="M12 50V42C12 31.5066 20.5066 23 31 23H89C99.4934 23 108 31.5066 108 42V50" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.3" />
+    <path d="M28 44L38 34H82L92 44" stroke="#ffffff" stroke-width="6" stroke-linejoin="round" opacity="0.45" />
+  </g>
+  <circle cx="60" cy="60" r="56" stroke="#E4ECFF" stroke-width="2" fill="none" />
+</svg>

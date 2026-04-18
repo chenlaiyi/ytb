@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微信登录中...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 40px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 90%;
+        }
+        .loading {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .message {
+            font-size: 16px;
+            opacity: 0.9;
+            line-height: 1.5;
+        }
+        .error {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .debug-info {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-size: 12px;
+            text-align: left;
+            font-family: monospace;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="loading"></div>
+        <div class="title">微信登录处理中</div>
+        <div class="message">正在验证您的微信授权信息...</div>
+        <div id="error-message" class="error" style="display: none;"></div>
+        <div id="debug-info" class="debug-info" style="display: none;"></div>
+    </div>
+
+    <script>
+        // 获取URL参数
+        function getUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                code: params.get('code'),
+                state: params.get('state'),
+                error: params.get('error'),
+                error_description: params.get('error_description')
+            };
+        }
+
+        // 显示错误信息
+        function showError(message, debugInfo = null) {
+            document.querySelector('.loading').style.display = 'none';
+            document.querySelector('.title').textContent = '登录失败';
+            document.querySelector('.message').textContent = message;
+            
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+
+            if (debugInfo) {
+                const debugDiv = document.getElementById('debug-info');
+                debugDiv.textContent = JSON.stringify(debugInfo, null, 2);
+                debugDiv.style.display = 'block';
+            }
+
+            // 3秒后跳转到登录页
+            setTimeout(() => {
+                window.location.href = '/app/#/login';
+            }, 3000);
+        }
+
+        // 处理微信回调
+        function handleWechatCallback() {
+            const params = getUrlParams();
+
+            console.log('微信回调参数:', params);
+            console.log('当前URL:', window.location.href);
+
+            // 检查是否有错误
+            if (params.error) {
+                showError('微信授权失败: ' + (params.error_description || params.error), params);
+                return;
+            }
+
+            // 检查是否有授权码
+            if (!params.code) {
+                showError('未获取到微信授权码，请重新登录', params);
+                return;
+            }
+
+            // 构建跳转URL，将参数传递给Vue应用
+            const targetUrl = `/app/#/wechat-callback?code=${encodeURIComponent(params.code)}${params.state ? `&state=${encodeURIComponent(params.state)}` : ''}`;
+            
+            console.log('准备跳转到:', targetUrl);
+
+            // 更新显示信息
+            document.querySelector('.message').textContent = '授权成功，正在跳转...';
+
+            // 跳转到Vue应用的微信回调页面
+            setTimeout(() => {
+                window.location.href = targetUrl;
+            }, 1000);
+        }
+
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                handleWechatCallback();
+            } catch (error) {
+                console.error('处理微信回调时出错:', error);
+                showError('处理微信回调时出错: ' + error.message, {
+                    error: error.message,
+                    stack: error.stack,
+                    url: window.location.href
+                });
+            }
+        });
+    </script>
+</body>
+</html>

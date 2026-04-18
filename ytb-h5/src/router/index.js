@@ -200,6 +200,7 @@ const Users = () => import('../views/admin/Users.vue')
 const InstallBooking = () => import('../views/installation/Booking.vue')
 const BookingPayment = () => import('../views/installation/BookingPayment.vue')
 const BookingList = () => import('../views/installation/BookingList.vue')
+const ActivateInstall = () => import('../views/installation/Activate.vue')
 const WechatCallbackInstall = () => import('../views/installation/WechatCallbackInstall.vue')
 
 // 茶农助手页面
@@ -2200,7 +2201,7 @@ const routes = [
     meta: {
       title: '安装预约支付',
       hideTabBar: true,
-      requiresAuth: true
+      requiresAuth: false
     }
   },
   // 预约安装列表路由
@@ -2212,6 +2213,16 @@ const routes = [
       title: '我的安装预约',
       hideTabBar: true,
       requiresAuth: true
+    }
+  },
+  {
+    path: '/installation/activate/:id',
+    name: 'ActivateInstall',
+    component: ActivateInstall,
+    meta: {
+      title: '设备绑定与激活',
+      hideTabBar: true,
+      requiresAuth: false
     }
   },
   // 兼容旧路由
@@ -2545,6 +2556,15 @@ router.beforeEach(async (to, from, next) => {
     )
 
     const pendingWechatLanding = localStorage.getItem('fromWechatLogin') === 'true'
+    const appTokenParam = to.query?.app_token
+    if (appTokenParam) {
+      localStorage.setItem('token', appTokenParam)
+      sessionStorage.setItem('token', appTokenParam)
+      userStore.setToken(appTokenParam)
+      userStore.isLoggedIn = true
+      localStorage.setItem('isLoggedIn', 'true')
+    }
+
     if (pendingWechatLanding && to.path.startsWith('/user')) {
       try {
         const storedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')

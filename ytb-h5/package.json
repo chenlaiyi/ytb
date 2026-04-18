@@ -9,7 +9,7 @@
     "build:ytb": "vite build --mode ytb-standalone",
     "build:force": "vite build --force",
     "preview": "vite preview",
-    "postinstall": "node scripts/fix-vant-globalThis.cjs && node scripts/patch-axios-fetch.cjs && node scripts/fix-vant-browser.cjs"
+    "postinstall": "node scripts/fix-vant-globalThis.js && node scripts/patch-axios-fetch.js && node scripts/fix-vant-browser.js"
   },
   "dependencies": {
     "@antv/infographic": "^0.2.7",

@@ -93,14 +93,17 @@ const getStatusClass = (status) => {
   switch (status) {
     case 'pending':
       return 'status-pending'
-    case 'processing':
+    case 'paid':
+    case 'accepted':
+      return 'status-processing'
+    case 'installing':
       return 'status-processing'
     case 'completed':
       return 'status-completed'
     case 'cancelled':
       return 'status-cancelled'
     default:
-      return ''
+      return 'status-pending'
   }
 }
 
@@ -108,36 +111,25 @@ const getStatusClass = (status) => {
 const getStatusText = (status) => {
   switch (status) {
     case 'pending':
-      return '待处理'
-    case 'processing':
-      return '处理中'
+      return '待用户付款'
+    case 'paid':
+      return '待接单'
+    case 'accepted':
+      return '待安装'
+    case 'installing':
+      return '安装中'
     case 'completed':
       return '已完成'
     case 'cancelled':
       return '已取消'
     default:
-      return '未知'
+      return '未知状态'
   }
 }
 
-// 映射后端状态到前端状态
+// 映射后端状态到前端状态 (YTB 直接使用字符串状态)
 const mapOrderStatus = (backendStatus) => {
-  switch (backendStatus) {
-    case 0:
-    case '0':
-      return 'pending'
-    case 1:
-    case '1':
-      return 'processing'
-    case 2:
-    case '2':
-      return 'completed'
-    case 3:
-    case '3':
-      return 'cancelled'
-    default:
-      return 'pending'
-  }
+  return backendStatus || 'pending';
 }
 
 // 获取工单类型文本
@@ -186,7 +178,7 @@ const loadOrders = async () => {
       params.append('status', props.status)
     }
 
-    const response = await fetch(`/api/mobile/v1/engineer/water-work-orders?${params}`, {
+    const response = await fetch(`/api/ytb/engineer/orders?${params}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -201,19 +193,19 @@ const loadOrders = async () => {
     const result = await response.json()
     
     if (result.code === 0 && result.data) {
-      const newOrders = result.data.data || []
+      const newOrders = result.data.data || result.data || []
       
-      // 转换数据格式以匹配前端显示
-      const formattedOrders = newOrders.map(order => ({
+      // 转换数据格式以匹配前端显示 (适配 ytb_install_orders 字段)
+      const formattedOrders = Array.isArray(newOrders) ? newOrders.map(order => ({
         id: order.id,
-        orderNo: order.work_order_no || `WO${order.id}`,
-        status: mapOrderStatus(order.status),
-        title: getOrderTypeText(order.type),
-        address: order.address || '地址信息待完善',
-        userName: order.customer_name || '客户姓名待完善',
-        phone: order.customer_phone || '联系电话待完善',
-        appointmentTime: order.appointment_time || order.created_at || '时间待确认'
-      }))
+        orderNo: order.order_no || `WO${order.id}`,
+        status: order.status || 'pending',
+        title: '净水器安装工单',
+        address: order.install_address || '地址信息待完善',
+        userName: order.contact_name || '客户姓名待完善',
+        phone: order.contact_phone || '联系电话待完善',
+        appointmentTime: order.install_time || order.created_at || '时间待确认'
+      })) : [];
       
       if (page.value === 1) {
         orders.value = formattedOrders

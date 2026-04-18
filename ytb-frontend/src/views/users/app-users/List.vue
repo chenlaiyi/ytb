@@ -6,9 +6,9 @@
         <div class="header-left">
           <h1 class="page-title">
             <el-icon class="title-icon"><User /></el-icon>
-            APP用户管理
+            用户管理
           </h1>
-          <p class="page-description">管理和查看所有APP用户信息</p>
+          <p class="page-description">管理和查看所有用户信息</p>
         </div>
         <div class="header-actions">
           <el-button type="primary" size="large" @click="handleAddUser">

@@ -1,1 +1,0 @@
-import{ag as o,H as r,I as t}from"./vendor-vue.ebe3bb33.js";import{_ as n}from"./main.ae909b70.js";import"./vendor-element.96775fb8.js";import"./vendor-utils.697f0497.js";const s={name:"ParentRouterView"};function a(c,p,_,i,m,u){const e=o("router-view",!0);return r(),t(e)}const $=n(s,[["render",a]]);export{$ as default};

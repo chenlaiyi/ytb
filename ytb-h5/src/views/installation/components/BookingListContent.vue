@@ -62,8 +62,11 @@
             <span class="booking-amount">¥{{ booking.total_amount }}</span>
           </div>
           
-          <div v-if="booking.status === 'pending' || booking.status === 'confirmed'" class="booking-actions">
+          <div v-if="booking.status === 'pending' || booking.status === 'confirmed' || booking.status === 'paid'" class="booking-actions">
             <van-button type="danger" size="small" plain @click.stop="cancelBooking(booking.id)">取消预约</van-button>
+          </div>
+          <div v-if="booking.status === 'completed'" class="booking-actions">
+            <van-button type="primary" size="small" @click.stop="goToActivate(booking.id)">去激活并支付套餐</van-button>
           </div>
         </div>
       </van-list>
@@ -167,8 +170,13 @@ export default {
     }
     
     // 跳转到详情
-  const goToDetail = (id) => {
+    const goToDetail = (id) => {
       router.push(`/installation/booking-detail/${id}`)
+    }
+    
+    // 跳转到激活页
+    const goToActivate = (id) => {
+      router.push(`/installation/activate/${id}`)
     }
     
     // 取消预约
@@ -210,6 +218,7 @@ export default {
       onLoad,
       onRefresh,
       goToDetail,
+      goToActivate,
       cancelBooking
     }
   }

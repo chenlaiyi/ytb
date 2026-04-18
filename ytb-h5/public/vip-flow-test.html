@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP邀请流程测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #f5f5f5;
+        }
+        .test-card {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #1989fa;
+            padding-bottom: 10px;
+        }
+        .test-step {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #1989fa;
+        }
+        .success { border-left-color: #52c41a; background: #f6ffed; }
+        .warning { border-left-color: #faad14; background: #fffbe6; }
+        .error { border-left-color: #ff4d4f; background: #fff2f0; }
+        .test-button {
+            background: #1989fa;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0c7cd5;
+        }
+        .log-area {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 VIP邀请流程测试页面</h1>
+    
+    <div class="test-card">
+        <div class="test-title">📋 测试说明</div>
+        <div class="test-step">
+            <strong>修复内容：</strong>
+            <ul>
+                <li>✅ 使用正确的 build.sh 脚本进行构建和部署</li>
+                <li>✅ 修复微信授权回调中的自动绑定推荐关系逻辑</li>
+                <li>✅ 修复用户登录后正确跳转回VIP招募页面</li>
+                <li>✅ 增强调试日志，便于问题排查</li>
+                <li>✅ 添加用户状态监听，自动刷新绑定状态</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-card">
+        <div class="test-title">🧪 测试步骤</div>
+        <div class="test-step">
+            <strong>1. 测试VIP邀请页面：</strong>
+            <button class="test-button" onclick="testVipPage()">访问VIP邀请页面</button>
+            <p>应该显示"接受邀请并授权登录"按钮（不再有注册按钮）</p>
+        </div>
+        
+        <div class="test-step">
+            <strong>2. 测试微信授权流程：</strong>
+            <button class="test-button" onclick="testWechatAuth()">模拟微信授权</button>
+            <p>点击"接受邀请并授权登录" → 微信授权 → 自动绑定推荐关系 → 回到VIP页面</p>
+        </div>
+        
+        <div class="test-step">
+            <strong>3. 测试按钮状态变化：</strong>
+            <button class="test-button" onclick="testButtonChange()">检查按钮状态</button>
+            <p>登录后按钮应该从"接受邀请并授权登录"变为"立即升级VIP"</p>
+        </div>
+    </div>
+
+    <div class="test-card">
+        <div class="test-title">🔍 实时测试</div>
+        <div class="test-step">
+            <strong>当前页面状态：</strong>
+            <div id="status-info"></div>
+        </div>
+        
+        <div class="test-step">
+            <strong>测试链接：</strong>
+            <div>
+                <a href="/app/#/vip/recruit-landing/78" target="_blank" class="test-button">
+                    打开VIP邀请页面 (推荐人ID: 78)
+                </a>
+            </div>
+        </div>
+        
+        <div class="log-area" id="test-log">
+            === 测试日志 ===
+            等待测试开始...
+        </div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logArea = document.getElementById('test-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logArea.textContent += `\n[${timestamp}] ${message}`;
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function updateStatus() {
+            const statusDiv = document.getElementById('status-info');
+            const token = localStorage.getItem('token');
+            const isLoggedIn = token ? '✅ 已登录' : '❌ 未登录';
+            const userInfo = localStorage.getItem('userInfo');
+            const user = userInfo ? JSON.parse(userInfo) : null;
+
+            statusDiv.innerHTML = `
+                <p><strong>登录状态：</strong> ${isLoggedIn}</p>
+                <p><strong>Token：</strong> ${token ? token.substring(0, 20) + '...' : '无'}</p>
+                <p><strong>用户ID：</strong> ${user?.id || '无'}</p>
+                <p><strong>用户名：</strong> ${user?.name || user?.nickname || '无'}</p>
+                <p><strong>推荐人ID：</strong> ${user?.referrer_id || '无'}</p>
+                <p><strong>微信OpenID：</strong> ${user?.wechat_openid ? '已绑定' : '未绑定'}</p>
+                <p><strong>手机号：</strong> ${user?.phone || '无'}</p>
+                <button onclick="clearUserData()" style="background: #ff4d4f; color: white; border: none; padding: 5px 10px; border-radius: 3px; margin-top: 10px;">清除用户数据</button>
+            `;
+        }
+
+        function clearUserData() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('userInfo');
+            localStorage.removeItem('isLoggedIn');
+            localStorage.removeItem('wechat_info');
+            localStorage.removeItem('tempUserInfo');
+            localStorage.removeItem('needBindPhone');
+            log('🗑️ 已清除所有用户数据');
+            updateStatus();
+        }
+
+        function testVipPage() {
+            log('🔗 测试VIP邀请页面...');
+            log('预期结果：只显示"接受邀请并授权登录"按钮');
+            window.open('/app/#/vip/recruit-landing/78', '_blank');
+        }
+
+        function testWechatAuth() {
+            log('🔐 测试微信授权流程...');
+            log('预期结果：自动绑定推荐关系并跳转回VIP页面');
+            log('请在VIP页面点击"接受邀请并授权登录"按钮');
+        }
+
+        function testButtonChange() {
+            log('🔄 检查按钮状态变化...');
+            updateStatus();
+            const token = localStorage.getItem('token');
+            if (token) {
+                log('✅ 用户已登录，按钮应该显示"立即升级VIP"');
+            } else {
+                log('❌ 用户未登录，按钮应该显示"接受邀请并授权登录"');
+            }
+        }
+
+        // 监听localStorage变化
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'token' || e.key === 'userInfo') {
+                log('📱 检测到用户状态变化');
+                updateStatus();
+            }
+        });
+
+        // 定期检查状态
+        setInterval(updateStatus, 2000);
+
+        // 初始化
+        log('🚀 VIP邀请流程测试页面已加载');
+        log('📝 请按照测试步骤进行测试');
+        updateStatus();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+import{ag as o,H as t,L as _,M as c}from"./vendor-vue.ebe3bb33.js";import{_ as s}from"./main.70ebe8ca.js";import"./vendor-element.96775fb8.js";import"./vendor-utils.697f0497.js";const a={class:"device-layout"},r={__name:"DeviceLayout",setup(n){return(p,i)=>{const e=o("router-view");return t(),_("div",a,[c(e)])}}},l=s(r,[["__scopeId","data-v-95307c1b"]]);export{l as default};

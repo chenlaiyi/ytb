@@ -117,7 +117,7 @@ const editMaxLength = ref(50)
 // 初始化
 onMounted(async () => {
   if (!isLoggedIn()) {
-    router.replace('/ytb/login')
+    router.replace('/login')
     return
   }
 
@@ -215,7 +215,7 @@ const handleLogout = async () => {
     
     await logout()
     clearAuth()
-    router.replace('/ytb/login')
+    router.replace('/login')
   } catch (error) {
     // 用户取消
   }

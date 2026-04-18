@@ -5,32 +5,9 @@
       <van-loading size="24px" vertical>加载中...</van-loading>
     </div>
 
-    <!-- 登录提示 (显示条件: 非加载中 且 未登录) -->
-    <div class="login-container" v-else-if="!isLoading && !isLoggedIn">
-      <div class="login-card">
-        <div class="login-title">欢迎使用净水器预约安装</div>
-        <div class="login-subtitle">请先登录后继续操作</div>
-        <van-image
-          width="100"
-          height="100"
-          src="/app/images/logo.png"
-          class="logo"
-        />
-        <van-button
-          type="primary"
-          block
-          icon="wechat"
-          color="#07c160"
-          class="wechat-login-btn"
-          @click="handleWechatLogin"
-        >
-          微信一键登录
-        </van-button>
-      </div>
-    </div>
+    <div class="booking-container" v-else-if="!isLoading">
 
-    <!-- 预约表单 (显示条件: 非加载中 且 已登录) -->
-    <div class="booking-container" v-else-if="!isLoading && isLoggedIn">
+
       <!-- 顶部邀请信息 -->
       <div class="hero-card card-shadow">
         <div class="hero-title-row">
@@ -653,7 +630,7 @@ const onDateColumnChange = (selectedValues) => {
 };
 
 const fetchPlanOptions = async () => {
-  if (!isLoggedIn.value || planLoading.value) {
+  if (planLoading.value) {
     return;
   }
   planLoading.value = true;
@@ -848,11 +825,10 @@ const onSubmit = async () => {
     const bookingData = {
       contact_name: form.name,
       contact_phone: form.phone,
-      install_address: form.address,
+      address: form.address,
       install_time: installTimeFormatted,
       package_type: selectedPlanKey.value,
-      billing_plan: selectedPlanKey.value,
-      remarks: form.remarks,
+      remark: form.remarks,
       referrer_id: referrerInfo.id || ''
     };
     if (parsedPayScore.value !== null) {
@@ -862,7 +838,7 @@ const onSubmit = async () => {
     console.log('[Booking] 提交安装预约数据:', bookingData);
     
     // 调用API创建预约
-    const response = await installationApi.createBookingFullPackage(bookingData);
+    const response = await installationApi.createBooking(bookingData);
     
     // 检查响应
     if (response && response.code === 0) {
@@ -873,10 +849,7 @@ const onSubmit = async () => {
       
       // 跳转到支付页面
       router.push({
-        path: `/installation/payment/${response.data.booking_id}`,
-        query: {
-          amount: response.data.total_amount
-        }
+        path: `/installation/payment/${response.data.id}`
       });
     } else {
       console.error('[Booking] 预约创建失败:', response);
@@ -996,26 +969,26 @@ const checkAuthAndLoad = async () => {
         isAuthenticated = false;
     }
 
-    // 步骤 3: 根据最终的认证状态执行后续操作
-    getReferrerIdFromUrlOrStorage(); // 先获取 referrerId，无论是否登录
+    // 步骤 3: 提取 referrerId并获取推荐人信息，无论是否登录
+    getReferrerIdFromUrlOrStorage(); 
+    if (referrerInfo.id) {
+        fetchReferrerInfo(referrerInfo.id);
+    }
+
+    // 无论是否登录，获取计费套餐列表
+    if (!hasFetchedPlans.value) {
+        await fetchPlanOptions();
+    }
 
     if (isAuthenticated) {
-        console.log('[Booking] User is authenticated. Initializing logged-in page.');
-        initializeLoggedInPage();
-        if (!hasFetchedPlans.value) {
-            await fetchPlanOptions();
-        }
-    } else {
-        console.log('[Booking] User is not authenticated. Login prompt will be shown.');
-        // 未登录状态下不需要执行 initializeLoggedInPage
-        // 确保 referrer_id 存在 localStorage 中以便登录 state 使用
-        if (referrerInfo.id && !localStorage.getItem('referrer_id')) {
-             localStorage.setItem('referrer_id', referrerInfo.id);
-             console.log('[Booking] Saved referrerId to localStorage for login state:', referrerInfo.id);
+        console.log('[Booking] User is authenticated. Pre-filling form.');
+        if (userInfo.value) {
+            form.name = userInfo.value.name || userInfo.value.nickname || '';
+            form.phone = userInfo.value.phone || '';
         }
     }
 
-    // 步骤 4: 结束加载状态
+    // 结束加载状态
     isLoading.value = false;
     console.log('[Booking] checkAuthAndLoad finished. isLoading set to false.');
 };

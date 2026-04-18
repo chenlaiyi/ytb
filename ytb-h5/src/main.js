@@ -45,6 +45,17 @@ const ensureWechatCallbackRoute = () => {
   }
 
   try {
+    const host = window.location.host || ''
+    const isYtbHost = host.includes('ytb.ddg.org.cn')
+    const isYtbStandaloneMode =
+      import.meta.env.MODE === 'ytb-standalone' ||
+      String(import.meta.env.VITE_YTB_STANDALONE || '').toLowerCase() === 'true'
+
+    // YTB 登录链路使用独立后端回调，不应被通用 wechat-callback 劫持
+    if (isYtbHost || isYtbStandaloneMode) {
+      return
+    }
+
     if (!isWechatBrowser()) {
       return
     }

@@ -17,26 +17,44 @@ export function getWorkOrders(params) {
   })
 }
 
-// 获取工单详情
+// 获取工单详情 (使用YTB API)
 export function getWorkOrderDetail(id) {
   return request({
-    url: `/api/mobile/v1/engineer/work-orders/${id}`,
+    url: `/api/ytb/install/orders/${id}`, // 共用详情接口
     method: 'get'
   })
 }
 
-// 接受工单
+// 接受工单 (使用YTB API)
 export function acceptWorkOrder(id) {
   return request({
-    url: `/api/mobile/v1/engineer/work-orders/${id}/accept`,
+    url: `/api/ytb/engineer/orders/${id}/accept`,
     method: 'post'
   })
 }
 
-// 完成工单
+// 领机扫码 (新增YTB API)
+export function pickWorkOrder(id, data) {
+  return request({
+    url: `/api/ytb/engineer/orders/${id}/pick`,
+    method: 'post',
+    data
+  })
+}
+
+// 开始工作/记录配件费 (新增YTB API)
+export function submitAccessories(id, data) {
+  return request({
+    url: `/api/ytb/engineer/orders/${id}/accessories`,
+    method: 'post',
+    data
+  })
+}
+
+// 提交水质检测/完成工单 (使用YTB API)
 export function completeWorkOrder(id, data) {
   return request({
-    url: `/api/mobile/v1/engineer/work-orders/${id}/complete`,
+    url: `/api/ytb/engineer/orders/${id}/water-test`,
     method: 'post',
     data
   })

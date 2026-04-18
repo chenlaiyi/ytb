@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微信登录调试工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #f5f5f5;
+        }
+        .debug-card {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .debug-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #1989fa;
+            padding-bottom: 10px;
+        }
+        .test-button {
+            background: #1989fa;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0c7cd5;
+        }
+        .test-button.danger {
+            background: #ff4d4f;
+        }
+        .test-button.success {
+            background: #52c41a;
+        }
+        .log-area {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .status-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-left: 4px solid #1989fa;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 微信登录调试工具</h1>
+    
+    <div class="debug-card">
+        <div class="debug-title">📋 问题诊断</div>
+        <div class="status-info">
+            <strong>当前问题：</strong>
+            <ul>
+                <li>VIP邀请页面微信授权登录后跳转到登录页面</li>
+                <li>普通登录页面微信授权登录后也跳转到登录页面</li>
+                <li>推荐关系没有自动绑定</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="debug-card">
+        <div class="debug-title">🔍 当前状态检查</div>
+        <div id="status-info"></div>
+        <button class="test-button" onclick="checkCurrentStatus()">检查当前状态</button>
+        <button class="test-button danger" onclick="clearAllData()">清除所有数据</button>
+    </div>
+
+    <div class="debug-card">
+        <div class="debug-title">🧪 API测试</div>
+        <div class="input-group">
+            <label>微信授权码 (code):</label>
+            <input type="text" id="wechat-code" placeholder="输入微信授权码进行测试">
+        </div>
+        <div class="input-group">
+            <label>状态码 (state):</label>
+            <input type="text" id="wechat-state" placeholder="输入状态码">
+        </div>
+        <button class="test-button" onclick="testWechatLoginAPI()">测试微信登录API</button>
+        <button class="test-button" onclick="testVipBindAPI()">测试推荐关系绑定API</button>
+    </div>
+
+    <div class="debug-card">
+        <div class="debug-title">🔗 快速测试链接</div>
+        <button class="test-button" onclick="testVipInvitePage()">测试VIP邀请页面</button>
+        <button class="test-button" onclick="testLoginPage()">测试登录页面</button>
+        <button class="test-button" onclick="testWechatCallback()">测试微信回调页面</button>
+    </div>
+
+    <div class="debug-card">
+        <div class="debug-title">📊 实时日志</div>
+        <div class="log-area" id="debug-log">
+            === 微信登录调试工具已加载 ===
+            等待测试开始...
+        </div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logArea = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logArea.textContent += `\n[${timestamp}] ${message}`;
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function checkCurrentStatus() {
+            log('🔍 检查当前状态...');
+            
+            const token = localStorage.getItem('token');
+            const userInfo = localStorage.getItem('userInfo');
+            const isLoggedIn = localStorage.getItem('isLoggedIn');
+            
+            const statusDiv = document.getElementById('status-info');
+            
+            let user = null;
+            try {
+                user = userInfo ? JSON.parse(userInfo) : null;
+            } catch (e) {
+                log('❌ 用户信息JSON解析失败: ' + e.message);
+            }
+            
+            statusDiv.innerHTML = `
+                <p><strong>Token:</strong> ${token ? '✅ 存在 (' + token.substring(0, 20) + '...)' : '❌ 不存在'}</p>
+                <p><strong>用户信息:</strong> ${user ? '✅ 存在' : '❌ 不存在'}</p>
+                <p><strong>用户ID:</strong> ${user?.id || '无'}</p>
+                <p><strong>用户名:</strong> ${user?.name || user?.nickname || '无'}</p>
+                <p><strong>推荐人ID:</strong> ${user?.referrer_id || '无'}</p>
+                <p><strong>微信OpenID:</strong> ${user?.wechat_openid ? '已绑定' : '未绑定'}</p>
+                <p><strong>手机号:</strong> ${user?.phone || '无'}</p>
+                <p><strong>登录状态标记:</strong> ${isLoggedIn || '无'}</p>
+            `;
+            
+            log('✅ 状态检查完成');
+        }
+
+        function clearAllData() {
+            log('🗑️ 清除所有用户数据...');
+            
+            localStorage.removeItem('token');
+            localStorage.removeItem('userInfo');
+            localStorage.removeItem('isLoggedIn');
+            localStorage.removeItem('wechat_info');
+            localStorage.removeItem('tempUserInfo');
+            localStorage.removeItem('needBindPhone');
+            localStorage.removeItem('wechat_redirect_url');
+            localStorage.removeItem('login_verify_code');
+            localStorage.removeItem('fromWechatLogin');
+            localStorage.removeItem('wechatLoginFlow');
+            
+            sessionStorage.clear();
+            
+            log('✅ 所有数据已清除');
+            checkCurrentStatus();
+        }
+
+        async function testWechatLoginAPI() {
+            const code = document.getElementById('wechat-code').value;
+            const state = document.getElementById('wechat-state').value;
+            
+            if (!code) {
+                log('❌ 请输入微信授权码');
+                return;
+            }
+            
+            log('📡 测试微信登录API...');
+            log('参数: code=' + code + ', state=' + state);
+            
+            try {
+                const response = await fetch('/api/wechat_login_callback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        code: code,
+                        state: state,
+                        _t: Date.now(),
+                        _r: Math.floor(Math.random() * 1000)
+                    })
+                });
+                
+                const result = await response.json();
+                log('📡 API响应: ' + JSON.stringify(result, null, 2));
+                
+                if (result.code === 0) {
+                    log('✅ 微信登录API测试成功');
+                    if (result.data && result.data.token) {
+                        log('🎫 获得Token: ' + result.data.token.substring(0, 20) + '...');
+                    }
+                    if (result.data && result.data.user) {
+                        log('👤 获得用户信息: ' + JSON.stringify(result.data.user));
+                    }
+                } else {
+                    log('❌ 微信登录API测试失败: ' + result.message);
+                }
+            } catch (error) {
+                log('❌ API调用异常: ' + error.message);
+            }
+        }
+
+        async function testVipBindAPI() {
+            log('📡 测试推荐关系绑定API...');
+            
+            try {
+                const response = await fetch('/api/bind_referrer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Authorization': 'Bearer ' + (localStorage.getItem('token') || '')
+                    },
+                    body: JSON.stringify({
+                        referrer_id: 78,
+                        bind_type: 'test'
+                    })
+                });
+                
+                const result = await response.json();
+                log('📡 绑定API响应: ' + JSON.stringify(result, null, 2));
+                
+                if (result.code === 0) {
+                    log('✅ 推荐关系绑定API测试成功');
+                } else {
+                    log('❌ 推荐关系绑定API测试失败: ' + result.message);
+                }
+            } catch (error) {
+                log('❌ 绑定API调用异常: ' + error.message);
+            }
+        }
+
+        function testVipInvitePage() {
+            log('🔗 打开VIP邀请页面...');
+            window.open('/app/#/vip/recruit-landing/78', '_blank');
+        }
+
+        function testLoginPage() {
+            log('🔗 打开登录页面...');
+            window.open('/app/#/login', '_blank');
+        }
+
+        function testWechatCallback() {
+            log('🔗 打开微信回调页面...');
+            window.open('/app/#/wechat-callback', '_blank');
+        }
+
+        // 监听localStorage变化
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'token' || e.key === 'userInfo') {
+                log('📱 检测到用户状态变化: ' + e.key);
+                checkCurrentStatus();
+            }
+        });
+
+        // 初始化
+        log('🚀 微信登录调试工具已加载');
+        checkCurrentStatus();
+    </script>
+</body>
+</html>

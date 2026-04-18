@@ -13,9 +13,9 @@
           <div class="logo-icon">
             <img :src="systemLogo" alt="点点够Logo" class="system-logo-img" />
           </div>
-          <h1 class="brand-title">点点够管理系统</h1>
+          <h1 class="brand-title">亿拓宝创业系统</h1>
         </div>
-        <p class="brand-subtitle">每天进步一点点，实现富而喜悦人生</p>
+        <p class="brand-subtitle">极度真诚，极致服务</p>
       </div>
     </div>
     

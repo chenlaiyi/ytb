@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分支机构信息设置</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button.danger {
+            background: #dc3545;
+        }
+        .button.danger:hover {
+            background: #c82333;
+        }
+        .button.success {
+            background: #28a745;
+        }
+        .button.success:hover {
+            background: #218838;
+        }
+        .info {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .current-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>分支机构信息设置</h1>
+        
+        <div class="info">
+            <strong>说明：</strong>此页面用于设置访问VIP列表页面所需的分支机构信息。设置完成后即可正常访问VIP会员列表。
+        </div>
+        
+        <div class="current-info" id="currentInfo">
+            正在检查当前信息...
+        </div>
+        
+        <button class="button success" onclick="setBranchInfo()">
+            设置YXY01分支机构信息
+        </button>
+        
+        <button class="button" onclick="checkBranchInfo()">
+            检查当前分支机构信息
+        </button>
+        
+        <button class="button" onclick="goToVipList()">
+            跳转到VIP列表页面
+        </button>
+        
+        <button class="button danger" onclick="clearBranchInfo()">
+            清除分支机构信息
+        </button>
+    </div>
+
+    <script>
+        // 设置分支机构信息
+        function setBranchInfo() {
+            const branchUserInfo = {
+                branch_code: 'YXY01',
+                branch_id: 2,
+                code: 'YXY01',
+                id: 2,
+                name: '益辛友01',
+                user_id: 257,
+                username: '测试用户'
+            };
+            
+            localStorage.setItem('branch_userInfo', JSON.stringify(branchUserInfo));
+            localStorage.setItem('userInfo', JSON.stringify(branchUserInfo));
+            
+            alert('YXY01分支机构信息设置成功！');
+            updateCurrentInfo();
+        }
+
+        // 清除分支机构信息
+        function clearBranchInfo() {
+            if (confirm('确定要清除分支机构信息吗？')) {
+                localStorage.removeItem('branch_userInfo');
+                localStorage.removeItem('userInfo');
+                alert('分支机构信息已清除');
+                updateCurrentInfo();
+            }
+        }
+
+        // 检查分支机构信息
+        function checkBranchInfo() {
+            const branchUserInfo = localStorage.getItem('branch_userInfo');
+            if (branchUserInfo) {
+                const parsed = JSON.parse(branchUserInfo);
+                alert(`当前分支机构: ${parsed.name || parsed.branch_code || '未知'}\n代码: ${parsed.branch_code || '未知'}\nID: ${parsed.branch_id || '未知'}`);
+            } else {
+                alert('未设置分支机构信息');
+            }
+        }
+
+        // 跳转到VIP列表
+        function goToVipList() {
+            window.open('/app/#/branch/vip/vip-list', '_blank');
+        }
+
+        // 更新当前信息显示
+        function updateCurrentInfo() {
+            const branchUserInfo = localStorage.getItem('branch_userInfo');
+            const userInfo = localStorage.getItem('userInfo');
+            
+            let html = '<strong>当前localStorage信息:</strong><br>';
+            html += 'branch_userInfo: ' + (branchUserInfo || '未设置') + '<br>';
+            html += 'userInfo: ' + (userInfo || '未设置');
+            
+            document.getElementById('currentInfo').innerHTML = html;
+        }
+
+        // 页面加载时更新信息
+        window.onload = function() {
+            updateCurrentInfo();
+        };
+    </script>
+</body>
+</html> 

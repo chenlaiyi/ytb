@@ -83,8 +83,8 @@ const routesConfig = [
                 path: 'users/app-users',
                 name: 'AppUsers',
                 component: () => import('../views/users/app-users/List.vue'),
-                meta: { 
-                    title: 'APP用户', 
+                meta: {
+                    title: '用户',
                     icon: 'User',
                     mainMenu: 'users'
                 }
@@ -431,6 +431,30 @@ const routesConfig = [
                 }
             },
             
+            // 设备管理模块
+            {
+                path: 'devices/heartbeat',
+                name: 'DevicesHeartbeat',
+                component: () => import('../views/devices/Heartbeat.vue'),
+                meta: {
+                    title: '心跳',
+                    icon: 'Bell',
+                    mainMenu: 'devices'
+                }
+            },
+
+            // 财务管理模块
+            {
+                path: 'finance/:subPath*',
+                name: 'Finance',
+                component: () => import('../views/finance/Index.vue'),
+                meta: {
+                    title: '财务管理',
+                    icon: 'Money',
+                    mainMenu: 'finance'
+                }
+            },
+
             // APP管理模块
             {
                 path: "app-management/diandian",

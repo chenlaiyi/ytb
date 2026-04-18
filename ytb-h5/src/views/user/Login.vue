@@ -138,7 +138,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Field, Button, Checkbox, Icon, Form, Dialog } from 'vant'
-import { login, loginBySms, sendSmsCode } from '@/api/user'
+import { login, loginBySms, sendSmsCode, getWechatLoginUrl as requestWechatLoginUrl } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import Toast from '@/utils/toast'
 import authManager from '@/utils/auth-optimized'
@@ -357,7 +357,7 @@ const checkPolicyAgreement = () => {
 const wechatLoginCache = new Map()
 
 // 获取微信登录URL（带缓存）
-const getWechatLoginUrl = async (params) => {
+const fetchWechatLoginUrl = async (params) => {
   const cacheKey = JSON.stringify(params)
   
   // 检查缓存（5分钟有效期）
@@ -367,28 +367,30 @@ const getWechatLoginUrl = async (params) => {
       return data
     }
   }
-  
-  // 发起请求
-  const response = await fetch(params.fullUrl, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest'
-    },
-    timeout: 10000
-  })
-  
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-  }
-  
-  const data = await response.json()
+
+  const data = await requestWechatLoginUrl(params)
   
   // 缓存结果
   wechatLoginCache.set(cacheKey, { data, timestamp: Date.now() })
   
   return data
+}
+
+const normalizeWechatAuthUrl = (url) => {
+  if (!url) return ''
+
+  let normalized = String(url).trim()
+
+  // 先统一替换所有明文scope值
+  normalized = normalized.replace(/snsapi_userinfo/gi, 'snsapi_base')
+
+  // 再强制scope参数为base，避免被其他参数拼接污染
+  normalized = normalized.replace(/([?&])scope=[^&#]*/i, '$1scope=snsapi_base')
+
+  // 兼容被encode后的scope参数
+  normalized = normalized.replace(/scope%3D[^%#&]*/i, 'scope%3Dsnsapi_base')
+
+  return normalized
 }
 
 // 统一错误处理
@@ -458,24 +460,27 @@ const handleWechatLogin = async () => {
     const stateTarget = buildWechatStateTarget()
     const state = encodeURIComponent(stateTarget)
     const redirect_uri = `${protocol}//${currentHost}/app/#/wechat-callback`
-    
-    // 构建API请求URL
-    const params = new URLSearchParams({
-      redirect_uri,
-      state,
-      _t: Date.now()
-    })
-    
-    const fullUrl = `${protocol}//${currentHost}/api/mobile/v1/wechat/login-url?${params.toString()}`
+    const isYtbHost = currentHost.includes('ytb.ddg.org.cn')
     
     // 获取微信登录URL（带缓存）
-    const res = await getWechatLoginUrl({ fullUrl, redirect_uri, state })
+    const res = await fetchWechatLoginUrl(
+      isYtbHost
+        ? { redirect_url: stateTarget }
+        : { redirect_uri, state, _t: Date.now() }
+    )
     
     // 检查请求结果
     if (res?.code === 0 && res?.data?.url) {
+      const rawAuthUrl = res.data.url
+      const authUrl = normalizeWechatAuthUrl(rawAuthUrl)
+      window.__ytb_last_auth_url_raw = rawAuthUrl
+      window.__ytb_last_auth_url = authUrl
+      localStorage.setItem('ytb_last_auth_url_raw', String(rawAuthUrl))
+      localStorage.setItem('ytb_last_auth_url', String(authUrl))
+      console.info('[YTB_AUTH_URL]', authUrl)
       // 跳转到微信授权页面
       setTimeout(() => {
-        window.location.href = res.data.url
+        window.location.href = authUrl
       }, 100)
     } else {
       Toast({ type: 'fail', message: res?.message || '获取微信登录链接失败，请稍后重试' })

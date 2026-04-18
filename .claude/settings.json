@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/tmp",
+      "/private/tmp"
+    ],
+    "allow": [
+      "Read(//www/wwwroot/ytb.ddg.org.cn/**)"
+    ]
+  }
+}

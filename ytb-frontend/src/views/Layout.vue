@@ -290,7 +290,7 @@ export default {
         result.push({ title: '业务员管理', path: '/users/salesmen' });
       } else if (currentPath === '/users/app-users') {
         result.push({ title: '用户管理', path: '/users' });
-        result.push({ title: 'APP用户', path: '/users/app-users' });
+        result.push({ title: '用户', path: '/users/app-users' });
       } else if (currentPath === '/users/vip-list') {
         result.push({ title: '用户管理', path: '/users' });
         result.push({ title: 'VIP会员列表', path: '/users/vip-list' });

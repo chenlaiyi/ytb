@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>点点够APP</title>
+  <meta name="description" content="点点够APP - 每天进步一点点，实现富而喜悦人生。">
+  <meta name="keywords" content="点点够,点点购,DDG,滴答购,点点购物,点点工厂,点点够工厂,点点够商城">
+  <meta name="author" content="点点够APP开发团队">
+
+  <!-- 避免被搜索引擎收录 -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- 屏蔽微信内置浏览器转码 -->
+  <meta name="format-detection" content="telephone=no">
+  <meta name="format-detection" content="address=no">
+  <meta name="format-detection" content="email=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- 默认的Open Graph标签 -->
+  <meta property="og:title" content="点点够APP">
+  <meta property="og:description" content="每天进步一点点，实现富而喜悦人生。">
+  <meta property="og:image" content="https://pay.itapgo.com/app/images/logo.png">
+  <meta property="og:url" content="https://pay.itapgo.com/app/">
+  <meta property="og:type" content="website">
+
+  <!-- 默认的Twitter卡片标签 -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="点点够APP">
+  <meta name="twitter:description" content="每天进步一点点，实现富而喜悦人生。">
+  <meta name="twitter:image" content="https://pay.itapgo.com/app/images/logo.png">
+
+  <!-- 网站图标 -->
+  <link rel="icon" href="/app/favicon.ico">
+  <link rel="apple-touch-icon" href="/app/apple-touch-icon.png">
+
+  <!-- 修复require未定义的问题 -->
+  <script type="text/javascript" src="/app/js/require-fix.js"></script>
+
+  <!-- jQuery兼容层 - 防止$ is not a function错误 -->
+  <script type="text/javascript">
+    window.$ = window.jQuery = function(selector) {
+      if (typeof selector === 'function') {
+        // 处理$(document).ready()
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', selector);
+        } else {
+          selector();
+        }
+        return;
+      }
+      // 返回一个简单的对象，避免错误
+      return {
+        ready: function(fn) {
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fn);
+          } else {
+            fn();
+          }
+        },
+        on: function() { return this; },
+        off: function() { return this; },
+        click: function() { return this; },
+        hide: function() { return this; },
+        show: function() { return this; },
+        fail: function() { return this; },
+        done: function() { return this; },
+        always: function() { return this; },
+        then: function() { return this; },
+        catch: function() { return this; }
+      };
+    };
+    
+    // 为全局$对象添加jQuery方法
+    if (typeof window.$ !== 'undefined') {
+      window.$.fail = function() { return this; };
+      window.$.done = function() { return this; };
+      window.$.always = function() { return this; };
+      window.$.then = function() { return this; };
+      window.$.catch = function() { return this; };
+    }
+  </script>
+  
+  <!-- 引入jQuery -->
+    <script type="text/javascript" src="/js/jquery.min.js"></script>
+    
+    <!-- 引入axios - 重命名为window.axiosLegacy避免与Vue3应用中的axios冲突 -->
+    <script type="text/javascript">
+    // 创建一个隔离的axios实例，避免与Vue3应用中的axios冲突
+    window.axiosLegacy = null;
+    </script>
+    <script type="text/javascript" src="/js/axios.min.js"></script>
+    <script type="text/javascript">
+    // 保存旧版本axios并设置兼容层
+    if (typeof window.axios !== 'undefined') {
+      window.axiosLegacy = window.axios;
+      
+      // 创建兼容层，确保旧版本axios的method属性安全访问
+      const originalAxiosLegacy = window.axiosLegacy;
+      window.axiosLegacy = {
+        ...originalAxiosLegacy,
+        request: function(config) {
+          // 确保method属性存在
+          if (config && !config.method) {
+            config.method = 'GET';
+          }
+          return originalAxiosLegacy.request(config);
+        },
+        get: function(url, config) {
+          return originalAxiosLegacy.get(url, config);
+        },
+        post: function(url, data, config) {
+          return originalAxiosLegacy.post(url, data, config);
+        },
+        put: function(url, data, config) {
+          return originalAxiosLegacy.put(url, data, config);
+        },
+        delete: function(url, config) {
+          return originalAxiosLegacy.delete(url, config);
+        }
+      };
+      
+      // 确保全局axios指向Vue3的axios（稍后会被Vue3应用设置）
+      // 这里先清空，等待Vue3应用设置
+      window.axios = undefined;
+    }
+    </script>
+
+  <!-- 错误监控和微信调试弹窗自动关闭工具 -->
+  <script type="text/javascript">
+    // 全局错误监控，专门捕获method.toUpperCase错误
+    window.addEventListener('error', function(event) {
+      var errorMessage = event.message || '';
+      var errorFilename = event.filename || '';
+      var errorLineno = event.lineno || 0;
+      var errorColno = event.colno || 0;
+      
+      // 检查是否是method.toUpperCase错误
+      if (errorMessage.includes('method.toUpperCase') || errorMessage.includes('undefined is not an object')) {
+        console.error('捕获到method.toUpperCase错误:', {
+          message: errorMessage,
+          filename: errorFilename,
+          line: errorLineno,
+          column: errorColno,
+          stack: event.error ? event.error.stack : 'No stack available'
+        });
+        
+        // 尝试修复：如果错误来自axios.min.js，记录详细信息
+        if (errorFilename.includes('axios.min.js')) {
+          console.warn('检测到axios.min.js中的method.toUpperCase错误，这可能是版本冲突导致的');
+          
+          // 尝试重新设置兼容层
+          if (window.axiosLegacy && typeof window.axiosLegacy.request === 'function') {
+            console.log('尝试重新设置axios兼容层');
+            // 这里可以添加更多的修复逻辑
+          }
+        }
+      }
+    });
+
+    // 关闭微信调试弹窗
+    function closeWechatDebugDialogs() {
+      // 判断是否在微信中
+      if (!/MicroMessenger/i.test(navigator.userAgent)) {
+        return;
+      }
+
+      // 定期检查并关闭弹窗
+      setInterval(function() {
+        try {
+          // 获取所有可能的弹窗
+          var debugDialogs = document.querySelectorAll('.wx_profile_dialog_primary, .weui-dialog, .wx_profile_dialog_wrp');
+          var closed = 0;
+
+          for (var i = 0; i < debugDialogs.length; i++) {
+            var dialog = debugDialogs[i];
+            if (dialog && dialog.style && dialog.style.display !== 'none') {
+              dialog.style.display = 'none';
+              closed++;
+            }
+          }
+
+          // 点击所有确认按钮
+          var okButtons = document.querySelectorAll('.wx_desktop_btn.primary, .weui-dialog__btn.weui-dialog__btn_primary');
+          for (var j = 0; j < okButtons.length; j++) {
+            var btn = okButtons[j];
+            if (btn && typeof btn.click === 'function') {
+              btn.click();
+              closed++;
+            }
+          }
+
+          if (closed > 0) {
+            console.log('关闭了 ' + closed + ' 个微信调试弹窗');
+          }
+        } catch (e) {
+          console.error('关闭微信调试弹窗失败:', e);
+        }
+      }, 500);
+    }
+
+    // 监听DOM加载完成
+    document.addEventListener('DOMContentLoaded', closeWechatDebugDialogs);
+
+    // 拦截可能的微信调试初始化
+    (function() {
+      var originalConsole = window.console;
+      if (originalConsole) {
+        var originalLog = originalConsole.log;
+        var originalWarn = originalConsole.warn;
+        var originalError = originalConsole.error;
+
+        // 过滤掉微信SDK的调试信息
+        window.console.log = function() {
+          var args = Array.prototype.slice.call(arguments);
+          if (args.length > 0 && typeof args[0] === 'string' &&
+              (args[0].indexOf('jsbridge') !== -1 ||
+               args[0].indexOf('wechat') !== -1 ||
+               args[0].indexOf('wx') !== -1)) {
+            // 不输出微信相关日志
+            return;
+          }
+          return originalLog.apply(originalConsole, arguments);
+        };
+
+        window.console.warn = function() {
+          var args = Array.prototype.slice.call(arguments);
+          if (args.length > 0 && typeof args[0] === 'string' &&
+              (args[0].indexOf('jsbridge') !== -1 ||
+               args[0].indexOf('wechat') !== -1 ||
+               args[0].indexOf('wx') !== -1)) {
+            // 不输出微信相关警告
+            return;
+          }
+          return originalWarn.apply(originalConsole, arguments);
+        };
+
+        window.console.error = function() {
+          var args = Array.prototype.slice.call(arguments);
+          if (args.length > 0 && typeof args[0] === 'string' &&
+              (args[0].indexOf('jsbridge') !== -1 ||
+               args[0].indexOf('wechat') !== -1 ||
+               args[0].indexOf('wx') !== -1)) {
+            // 不输出微信相关错误
+            return;
+          }
+          return originalError.apply(originalConsole, arguments);
+        };
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

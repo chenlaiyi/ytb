@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP按钮测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .primary-btn {
+            background-color: #1989fa;
+            color: white;
+        }
+        .success-btn {
+            background-color: #07c160;
+            color: white;
+        }
+        .log {
+            background-color: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>VIP升级按钮测试页面</h1>
+    
+    <div class="test-section">
+        <h3>测试1: 基本按钮点击</h3>
+        <button class="primary-btn" onclick="testBasicClick()">测试基本点击</button>
+        <div id="basic-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>测试2: 模拟VIP升级按钮</h3>
+        <button class="success-btn" onclick="testVipUpgrade()">立即升级VIP</button>
+        <div id="vip-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>测试3: 检查全局状态</h3>
+        <button class="primary-btn" onclick="checkGlobalState()">检查全局状态</button>
+        <div id="state-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>测试4: 检查实际页面</h3>
+        <button class="primary-btn" onclick="checkActualPage()">检查实际VIP页面</button>
+        <div id="actual-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>测试5: 清除缓存指导</h3>
+        <p>如果按钮仍然无响应，请尝试以下步骤：</p>
+        <ol>
+            <li>按 Ctrl+Shift+R (Windows) 或 Cmd+Shift+R (Mac) 强制刷新页面</li>
+            <li>清除浏览器缓存：设置 → 隐私和安全 → 清除浏览数据</li>
+            <li>在微信中，可以尝试退出微信重新进入</li>
+            <li>检查网络连接是否正常</li>
+        </ol>
+    </div>
+
+    <script>
+        function log(elementId, message) {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            element.textContent += `[${timestamp}] ${message}\n`;
+            element.scrollTop = element.scrollHeight;
+        }
+
+        function testBasicClick() {
+            log('basic-log', '按钮被点击了！');
+            log('basic-log', '用户代理: ' + navigator.userAgent);
+            log('basic-log', '当前URL: ' + window.location.href);
+        }
+
+        function testVipUpgrade() {
+            log('vip-log', '=== VIP升级按钮被点击 ===');
+            
+            // 检查是否在微信环境
+            const isWeChat = /micromessenger/i.test(navigator.userAgent);
+            log('vip-log', '是否在微信环境: ' + isWeChat);
+            
+            // 检查全局变量
+            log('vip-log', '处理状态: ' + (window._isProcessingVipUpgrade || 'undefined'));
+            
+            // 模拟检查用户登录状态
+            const mockUser = {
+                isLoggedIn: false,
+                wechat_openid: null
+            };
+            
+            log('vip-log', '模拟用户状态: ' + JSON.stringify(mockUser));
+            
+            if (!mockUser.isLoggedIn) {
+                log('vip-log', '用户未登录，需要先登录');
+                return;
+            }
+            
+            if (!mockUser.wechat_openid) {
+                log('vip-log', '用户没有微信openid，需要微信授权');
+                
+                // 模拟Dialog确认
+                if (confirm('需要微信授权\n\n升级VIP需要微信授权，是否立即进行授权？')) {
+                    log('vip-log', '用户确认进行微信授权');
+                    log('vip-log', '跳转到微信授权页面...');
+                } else {
+                    log('vip-log', '用户取消微信授权');
+                }
+                return;
+            }
+            
+            log('vip-log', '开始创建VIP订单...');
+        }
+
+        function checkGlobalState() {
+            log('state-log', '=== 检查全局状态 ===');
+            log('state-log', 'window._isProcessingVipUpgrade: ' + (window._isProcessingVipUpgrade || 'undefined'));
+            log('state-log', 'document.readyState: ' + document.readyState);
+            log('state-log', 'window.location.href: ' + window.location.href);
+            log('state-log', 'navigator.userAgent: ' + navigator.userAgent);
+
+            // 检查是否有Vue相关的全局变量
+            log('state-log', 'Vue实例: ' + (typeof window.Vue !== 'undefined' ? '存在' : '不存在'));
+
+            // 检查控制台错误
+            log('state-log', '请检查浏览器控制台是否有错误信息');
+        }
+
+        function checkActualPage() {
+            log('actual-log', '=== 检查实际VIP页面 ===');
+
+            // 尝试访问实际页面
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = '/app/#/vip/recruit-landing/78';
+
+            iframe.onload = function() {
+                log('actual-log', '页面加载完成');
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    const buttons = iframeDoc.querySelectorAll('button');
+                    log('actual-log', '找到按钮数量: ' + buttons.length);
+
+                    buttons.forEach((btn, index) => {
+                        if (btn.textContent.includes('立即升级VIP')) {
+                            log('actual-log', `找到VIP按钮 ${index}: ${btn.textContent}`);
+                            log('actual-log', `按钮onclick: ${btn.onclick}`);
+                            log('actual-log', `按钮事件监听器: ${btn.getEventListeners ? 'supported' : 'not supported'}`);
+                        }
+                    });
+                } catch (e) {
+                    log('actual-log', '无法访问iframe内容: ' + e.message);
+                }
+
+                document.body.removeChild(iframe);
+            };
+
+            iframe.onerror = function() {
+                log('actual-log', '页面加载失败');
+                document.body.removeChild(iframe);
+            };
+
+            document.body.appendChild(iframe);
+        }
+
+        // 页面加载完成后的初始化
+        window.addEventListener('load', function() {
+            log('state-log', '页面加载完成');
+            checkGlobalState();
+        });
+    </script>
+</body>
+</html>

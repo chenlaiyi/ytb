@@ -6,6 +6,10 @@
 // 是否开启调试模式 - 生产环境关闭
 const DEBUG = false;
 
+const IS_YTB_STANDALONE =
+  import.meta.env.MODE === 'ytb-standalone' ||
+  String(import.meta.env.VITE_YTB_STANDALONE || '').toLowerCase() === 'true';
+
 // 共享的微信JSSDK配置缓存
 const CACHE_MAX_AGE = 300000; // 配置缓存有效期5分钟
 const wxConfigCache = new Map();
@@ -202,7 +206,7 @@ export const setShareMetadata = (options = {}) => {
     }
 
     // 在微信环境中，尝试配置微信分享，但不阻塞主流程
-    if (isWechatBrowser()) {
+    if (isWechatBrowser() && !IS_YTB_STANDALONE) {
       // 异步处理微信分享，避免阻塞
       setTimeout(() => {
         try {
@@ -225,6 +229,8 @@ export const setShareMetadata = (options = {}) => {
           log('微信分享配置失败，但不影响页面功能:', error);
         }
       }, 100);
+    } else if (isWechatBrowser() && IS_YTB_STANDALONE) {
+      log('YTB standalone 模式下跳过微信 JSSDK 远程配置');
     }
   } catch (error) {
     errorLog('setShareMetadata 函数执行出错:', error);
@@ -421,6 +427,11 @@ function loadWechatScript(onLoad, onError) {
  * @param {Function} callback 获取成功后的回调，传入配置对象或 null
  */
 function fetchWxConfig(callback, branchCode = null) {
+  if (IS_YTB_STANDALONE) {
+    callback(null);
+    return;
+  }
+
   const currentTime = Date.now();
 
   // 使用当前页面的完整URL进行签名（保留查询参数，移除 hash）

@@ -311,7 +311,7 @@ const paymentActions = computed(() => {
 // 初始化
 onMounted(async () => {
   if (!isLoggedIn()) {
-    router.replace('/ytb/login')
+    router.replace('/login')
     return
   }
 

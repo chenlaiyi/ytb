@@ -392,21 +392,24 @@ service.interceptors.request.use(
     // 在发送请求之前做些什么
     // 可以在这里添加token等认证信息
     const isAdmin = isAdminRequest(config)
+    const skipAuth = Boolean(config?.skipAuth)
     let token = null
 
-    try {
-      const simulateMode = sessionStorage.getItem('simulate_mode')
-      const simulateToken = sessionStorage.getItem('simulate_token')
+    if (!skipAuth) {
+      try {
+        const simulateMode = sessionStorage.getItem('simulate_mode')
+        const simulateToken = sessionStorage.getItem('simulate_token')
 
-      if (!isAdmin && simulateMode === 'true' && simulateToken) {
-        token = simulateToken
-        config.headers['X-Simulate-Mode'] = 'true'
-      } else {
+        if (!isAdmin && simulateMode === 'true' && simulateToken) {
+          token = simulateToken
+          config.headers['X-Simulate-Mode'] = 'true'
+        } else {
+          token = isAdmin ? getAdminToken() : getAppToken()
+        }
+      } catch (e) {
+        console.warn('[request] 读取token失败，将继续尝试默认流程:', e)
         token = isAdmin ? getAdminToken() : getAppToken()
       }
-    } catch (e) {
-      console.warn('[request] 读取token失败，将继续尝试默认流程:', e)
-      token = isAdmin ? getAdminToken() : getAppToken()
     }
 
     if (token) {
@@ -431,9 +434,11 @@ service.interceptors.request.use(
     }
     
     // 确保用户ID被正确传递
-    const userId = resolveUserId(config);
-    if (userId) {
-      config.headers['X-User-ID'] = userId;
+    if (!skipAuth) {
+      const userId = resolveUserId(config);
+      if (userId) {
+        config.headers['X-User-ID'] = userId;
+      }
     }
     
     return config

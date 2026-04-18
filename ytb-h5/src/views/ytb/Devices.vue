@@ -122,6 +122,7 @@ const loading = ref(false)
 const finished = ref(false)
 const refreshing = ref(false)
 const devices = ref([])
+const authFailed = ref(false)
 const page = ref(1)
 const pageSize = 10
 
@@ -190,7 +191,7 @@ const formatDevice = (device) => {
 }
 
 const loadDevices = async () => {
-  if (refreshing.value) return
+  if (refreshing.value || authFailed.value || finished.value) return
 
   try {
     loading.value = true
@@ -216,6 +217,8 @@ const loadDevices = async () => {
     }
   } catch (error) {
     if (error?.response?.status === 401) {
+      authFailed.value = true
+      finished.value = true
       return
     }
     console.error('加载设备失败:', error)
@@ -236,7 +239,7 @@ const onRefresh = async () => {
 }
 
 const goToDetail = (device) => {
-  router.push(`/ytb/device/${device.id}`)
+  router.push(`/device/${device.id}`)
 }
 
 const handleAddDevice = () => {
@@ -254,7 +257,8 @@ const formatNumber = (value) => {
 
 onMounted(() => {
   if (!isLoggedIn()) {
-    router.replace('/ytb/login')
+    authFailed.value = true
+    router.replace('/login')
     return
   }
   loadDevices()

@@ -2,9 +2,11 @@
  * 亿拓宝 API 接口
  */
 import axios from 'axios'
+import request from '@/utils/request'
 import { getYtbApiBaseUrl, getYtbLoginUrl } from '@/utils/ytb'
 
 const BASE_URL = getYtbApiBaseUrl()
+let ytbAuthRedirecting = false
 
 // 创建 axios 实例
 const ytbApi = axios.create({
@@ -36,7 +38,10 @@ ytbApi.interceptors.response.use(
       localStorage.removeItem('ytb_token')
       localStorage.removeItem('ytb_user')
       // 跳转到登录页
-      window.location.href = getYtbLoginUrl()
+      if (!ytbAuthRedirecting) {
+        ytbAuthRedirecting = true
+        window.location.replace(getYtbLoginUrl())
+      }
     }
     return Promise.reject(error)
   }
@@ -54,9 +59,52 @@ export function getConfig() {
 /**
  * 获取微信登录URL
  */
-export function getWechatLoginUrl(redirectUrl = '/ytb/home') {
-  return ytbApi.get('/auth/login-url', {
-    params: { redirect_url: redirectUrl }
+export function getWechatLoginUrl(redirectUrl = '/home') {
+  const clearStaleAuthArtifacts = () => {
+    try {
+      localStorage.removeItem('token')
+      localStorage.removeItem('userInfo')
+      localStorage.removeItem('isLoggedIn')
+      localStorage.removeItem('login_time')
+      sessionStorage.removeItem('token')
+      sessionStorage.removeItem('userInfo')
+      sessionStorage.removeItem('login_time')
+
+      const expireCookie = (name) => {
+        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+      }
+      expireCookie('token')
+      expireCookie('tapgo_token')
+      expireCookie('user_id')
+      expireCookie('login_time')
+    } catch (error) {
+      console.warn('[ytb-wechat-login-url] 清理旧认证态失败:', error)
+    }
+  }
+
+  const requestWechatLoginUrl = (targetRedirectUrl) => request({
+    url: '/api/ytb/auth/login-url',
+    method: 'get',
+    params: {
+      redirect_url: targetRedirectUrl || '/home',
+      _t: Date.now()
+    },
+    timeout: 10000,
+    skipCache: true,
+    skipAuth: true,
+    skipAuthError: true,
+    skipAuthErrorToast: true
+  })
+
+  const target = typeof redirectUrl === 'string' ? decodeURIComponent(redirectUrl) : '/home'
+  return requestWechatLoginUrl(target).catch((error) => {
+    const httpStatus = error?.response?.status
+    const apiCode = Number(error?.code)
+    if (httpStatus === 401 || apiCode === 401 || apiCode === 1001 || apiCode === 1002) {
+      clearStaleAuthArtifacts()
+      return requestWechatLoginUrl(target)
+    }
+    return Promise.reject(error)
   })
 }
 

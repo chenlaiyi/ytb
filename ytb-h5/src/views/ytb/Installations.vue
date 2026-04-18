@@ -189,7 +189,7 @@ const generateQRCode = async () => {
     }
     
     // 推广链接：指向注册页或着陆页，带上邀请码
-    const shareUrl = `${window.location.origin}/#/ytb/register?invite_code=${inviteCode.value}`
+    const shareUrl = `${window.location.origin}/#/register?invite_code=${inviteCode.value}`
     
     if (qrcodeRef.value) {
         qrcodeRef.value.innerHTML = ''

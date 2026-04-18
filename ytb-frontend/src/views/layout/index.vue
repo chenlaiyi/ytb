@@ -316,7 +316,7 @@ export default {
         result.push({ title: '薪酬管理', path: '/users/salesmen/salary' });
       } else if (currentPath === '/users/app-users') {
         result.push({ title: '用户管理', path: '/users' });
-        result.push({ title: 'APP用户', path: '/users/app-users' });
+        result.push({ title: '用户', path: '/users/app-users' });
       } else if (currentPath === '/users/vip-list') {
         result.push({ title: '用户管理', path: '/users' });
         result.push({ title: 'VIP会员列表', path: '/users/vip-list' });
@@ -459,7 +459,7 @@ export default {
           path: 'users',
           meta: { title: '用户管理', icon: 'User' },
           children: [
-            { id: 21, path: 'users/app-users', meta: { title: 'APP用户', icon: 'Avatar' } },
+            { id: 21, path: 'users/app-users', meta: { title: '用户', icon: 'Avatar' } },
             { id: 22, path: 'users/admins', meta: { title: '后台管理员', icon: 'UserFilled' } }
           ]
         },

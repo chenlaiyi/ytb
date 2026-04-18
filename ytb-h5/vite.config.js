@@ -39,11 +39,9 @@ export default defineConfig(({ mode }) => {
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      'vant/es/composables/use-globalThis-z-index.mjs': path.resolve(__dirname, 'node_modules/vant/es/composables/use-global-z-index.mjs'),
-      'vant/es/composables/use-globalThis-z-index': path.resolve(__dirname, 'node_modules/vant/es/composables/use-global-z-index.mjs'),
+      'vant/es/composables/use-globalThis-z-index.mjs': 'vant/es/composables/use-global-z-index.mjs',
+      'vant/es/composables/use-globalThis-z-index': 'vant/es/composables/use-global-z-index.mjs',
       'axios/lib/utils.js': path.resolve(__dirname, 'node_modules/axios/lib/utils.js'),
-      'axios/lib/adapters/fetch.js': path.resolve(__dirname, 'src/polyfills/axios-fetch-stub.js'),
-      'axios/lib/adapters/fetch': path.resolve(__dirname, 'src/polyfills/axios-fetch-stub.js')
     },
   },
   

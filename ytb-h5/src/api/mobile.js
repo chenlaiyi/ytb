@@ -1,9 +1,45 @@
 import request from '@/utils/request'
 
+const YTB_HOST_KEYWORD = 'ytb.ddg.org.cn'
+
+const isYtbHost = () => {
+  if (typeof window === 'undefined') return false
+  return (window.location?.host || '').includes(YTB_HOST_KEYWORD)
+}
+
+const buildWechatRedirectUri = () => {
+  if (typeof window === 'undefined') {
+    return 'https://ytb.ddg.org.cn/app/#/wechat-callback'
+  }
+
+  const protocol = window.location?.protocol || 'https:'
+  const host = window.location?.host || 'ytb.ddg.org.cn'
+  return `${protocol}//${host}/app/#/wechat-callback`
+}
+
 // 微信授权相关API
 export const wechatAuthApi = {
   // 生成微信授权URL
   getAuthUrl: (params = {}) => {
+    if (isYtbHost()) {
+      const state = params.state || params.redirect_url || '/user'
+      return request({
+        url: '/api/mobile/v1/auth/wechat-url',
+        method: 'get',
+        params: {
+          ...params,
+          redirect_uri: buildWechatRedirectUri(),
+          state,
+          _t: Date.now()
+        },
+        timeout: 10000,
+        skipCache: true,
+        skipAuth: true,
+        skipAuthError: true,
+        skipAuthErrorToast: true
+      })
+    }
+
     return request({
       url: '/api/mobile/v1/wechat/login-url',
       method: 'get',
@@ -15,6 +51,18 @@ export const wechatAuthApi = {
 
   // 微信登录回调
   wechatLoginCallback: (data) => {
+    if (isYtbHost()) {
+      return request({
+        url: '/api/mobile/v1/auth/wechat-callback',
+        method: 'post',
+        data,
+        timeout: 15000,
+        skipAuth: true,
+        skipAuthError: true,
+        skipAuthErrorToast: true
+      })
+    }
+
     return request({
       url: '/api/mobile/v1/auth/wechat-callback',
       method: 'post',

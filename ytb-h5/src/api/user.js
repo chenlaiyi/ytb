@@ -1,6 +1,12 @@
 import request from '@/utils/request'
 
 const LEGACY_USER_API_BASES = ['/Tapp/admin/api/user', '/user']
+const YTB_HOST_KEYWORD = 'ytb.ddg.org.cn'
+
+const isYtbHost = () => {
+  if (typeof window === 'undefined') return false
+  return (window.location?.host || '').includes(YTB_HOST_KEYWORD)
+}
 
 const resolveAppToken = () => {
   if (typeof window === 'undefined') return ''
@@ -219,22 +225,84 @@ export function login(data) {
  * @returns {Promise<Object>} 微信登录URL
  */
 export function getWechatLoginUrl(data = {}) {
-  // 使用Laravel RESTful API
-  
-  // 简化参数，移除不必要的随机数
+  const ytbHost = isYtbHost()
+
+  const clearStaleAuthArtifacts = () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    try {
+      localStorage.removeItem('token')
+      localStorage.removeItem('userInfo')
+      localStorage.removeItem('isLoggedIn')
+      localStorage.removeItem('login_time')
+      sessionStorage.removeItem('token')
+      sessionStorage.removeItem('userInfo')
+      sessionStorage.removeItem('login_time')
+
+      const expireCookie = (name) => {
+        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+      }
+
+      expireCookie('token')
+      expireCookie('tapgo_token')
+      expireCookie('user_id')
+      expireCookie('login_time')
+    } catch (error) {
+      console.warn('[wechat-login-url] 清理旧认证态失败:', error)
+    }
+  }
+
+  const requestYtbLoginUrl = (redirectUrl) => {
+    return request({
+      url: '/api/ytb/auth/login-url',
+      method: 'get',
+      params: {
+        redirect_url: redirectUrl,
+        _t: Date.now()
+      },
+      timeout: 10000,
+      skipCache: true,
+      skipAuth: true,
+      skipAuthError: true,
+      skipAuthErrorToast: true
+    })
+  }
+
+  // ytb域名下强制走亿拓宝专用微信登录接口，避免命中点点够公众号参数
+  if (ytbHost) {
+    const redirectUrlRaw = data.redirect_url || data.state || '/home'
+    const redirectUrl = typeof redirectUrlRaw === 'string'
+      ? decodeURIComponent(redirectUrlRaw)
+      : '/home'
+
+    return requestYtbLoginUrl(redirectUrl).catch((error) => {
+      const status = error?.response?.status
+      const code = Number(error?.code)
+      const isAuthError = status === 401 || code === 401 || code === 1001 || code === 1002
+
+      if (!isAuthError) {
+        return Promise.reject(error)
+      }
+
+      clearStaleAuthArtifacts()
+      return requestYtbLoginUrl(redirectUrl)
+    })
+  }
+
   const params = {
     ...data,
     _t: Date.now()
-  };
+  }
 
-  // 使用Laravel RESTful API，添加超时控制
   return request({
     url: '/api/mobile/v1/wechat/login-url',
     method: 'get',
     params,
     timeout: 10000,
-    skipCache: true // 微信登录不使用缓存
-  });
+    skipCache: true
+  })
 }
 
 /**

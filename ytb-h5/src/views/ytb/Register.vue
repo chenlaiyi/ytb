@@ -168,7 +168,7 @@ onMounted(async () => {
 
   // 未登录时先跳转到微信授权登录，避免产生重复账号
   if (!isLoggedIn()) {
-    router.replace({ path: '/ytb/login', query: { invite_code: inviteCode.value } })
+    router.replace({ path: '/login', query: { invite_code: inviteCode.value } })
     return
   }
 
@@ -237,12 +237,12 @@ const onSubmit = async () => {
 // 成功确认
 const onSuccessConfirm = () => {
   // 跳转到登录页
-  router.push('/ytb/login')
+  router.push('/login')
 }
 
 // 返回登录
 const goToLogin = () => {
-  router.push('/ytb/login')
+  router.push('/login')
 }
 </script>
 

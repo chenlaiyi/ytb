@@ -255,7 +255,7 @@ const submitButtonText = computed(() => {
 // 初始化
 onMounted(async () => {
   if (!isLoggedIn()) {
-    router.replace('/ytb/login')
+    router.replace('/login')
     return
   }
   await loadWithdrawInfo()
@@ -390,7 +390,7 @@ const formatMoney = (value) => {
 }
 
 // 跳转到提现记录
-const goToRecords = () => router.push('/ytb/withdraw-records')
+const goToRecords = () => router.push('/withdraw-records')
 
 // 返回
 const goBack = () => router.back()

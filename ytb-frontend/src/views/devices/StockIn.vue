@@ -4,38 +4,38 @@
     <el-row :gutter="16" class="stats-row">
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card">
-          <div class="stat-value">{{ statistics.total_devices || 0 }}</div>
+          <div class="stat-value">{{ statistics.total }}</div>
           <div class="stat-label">设备总数</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-pending">
-          <div class="stat-value">{{ statistics.pending_devices || 0 }}</div>
+          <div class="stat-value">{{ statistics.pending }}</div>
           <div class="stat-label">待激活</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-activated">
-          <div class="stat-value">{{ statistics.activated_devices || 0 }}</div>
+          <div class="stat-value">{{ statistics.activated }}</div>
           <div class="stat-label">已激活</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-iot">
-          <div class="stat-value">{{ statistics.iot_registered_devices || 0 }}</div>
+          <div class="stat-value">{{ statistics.iot_registered }}</div>
           <div class="stat-label">IOT已注册</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-today">
-          <div class="stat-value">{{ statistics.today_devices || 0 }}</div>
-          <div class="stat-label">今日注册</div>
+          <div class="stat-value">{{ statistics.today_registered }}</div>
+          <div class="stat-label">今日入库</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-month">
-          <div class="stat-value">{{ statistics.this_month_devices || 0 }}</div>
-          <div class="stat-label">本月注册</div>
+          <div class="stat-value">{{ statistics.this_month_registered }}</div>
+          <div class="stat-label">本月入库</div>
         </el-card>
       </el-col>
     </el-row>
@@ -46,15 +46,15 @@
         <div class="card-header">
           <span>设备入库管理</span>
           <div class="header-actions">
-            <el-button type="primary" @click="showAddDialog">
+            <el-button type="primary" @click="showRegisterDialog">
               <el-icon><Plus /></el-icon>
-              添加设备
+              单个入库
             </el-button>
             <el-button type="success" @click="showBatchDialog">
               <el-icon><Upload /></el-icon>
-              批量登记
+              批量入库
             </el-button>
-            <el-button @click="loadDevices">
+            <el-button @click="loadAll">
               <el-icon><Refresh /></el-icon>
               刷新
             </el-button>
@@ -67,24 +67,19 @@
         <el-form-item label="关键词">
           <el-input
             v-model="searchForm.keyword"
-            placeholder="设备编号/IMEI/主板编码"
+            placeholder="主板编码/IMEI/ICCID"
             clearable
             @keyup.enter="loadDevices"
+            style="width: 200px"
           />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="全部状态" clearable>
+          <el-select v-model="searchForm.status" placeholder="全部状态" clearable style="width: 120px">
             <el-option label="待激活" value="pending" />
-            <el-option label="已分配" value="assigned" />
             <el-option label="已安装" value="installed" />
             <el-option label="已激活" value="activated" />
-            <el-option label="已禁用" value="disabled" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="IOT注册">
-          <el-select v-model="searchForm.iot_registered" placeholder="全部" clearable>
-            <el-option label="已注册" value="1" />
-            <el-option label="未注册" value="0" />
+            <el-option label="已锁定" value="locked" />
+            <el-option label="故障" value="fault" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -95,66 +90,64 @@
 
       <!-- 设备列表 -->
       <el-table :data="devices" v-loading="loading" stripe border>
-        <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="device_number" label="设备编号" width="120" />
-        <el-table-column prop="board_code" label="主板编码" width="120" />
-        <el-table-column prop="imei" label="IMEI" width="150" />
-        <el-table-column prop="iccid" label="ICCID" width="150" />
-        <el-table-column prop="module_code" label="模块编码" width="120" />
-        <el-table-column label="品牌/型号" width="120">
+        <el-table-column prop="id" label="ID" width="60" align="center" />
+        <el-table-column label="主板编码" width="110">
           <template #default="{ row }">
-            <span>{{ row.brand || '-' }}</span>
-            <span v-if="row.device_model"> / {{ row.device_model }}</span>
+            <span style="font-weight: 600; color: #303133;">{{ row.board_code || row.device_number }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status_text" label="状态" width="100">
+        <el-table-column prop="imei" label="IMEI" width="160">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">
-              {{ row.status_text }}
+            <span style="font-family: monospace; font-size: 12px;">{{ row.imei || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="ICCID" width="200">
+          <template #default="{ row }">
+            <span style="font-family: monospace; font-size: 12px;">{{ row.iccid || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="模块" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain">{{ moduleLabels[row.module_code] || row.module_code || '-' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="品牌/型号" width="130">
+          <template #default="{ row }">
+            <div v-if="row.brand">
+              <span style="font-weight: 500;">{{ row.brand }}</span>
+              <span v-if="row.device_model" style="color: #909399;"> / {{ row.device_model }}</span>
+            </div>
+            <span v-else style="color: #c0c4cc;">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="85" align="center">
+          <template #default="{ row }">
+            <el-tag :type="statusType[row.status] || 'info'" size="small">
+              {{ statusText[row.status] || row.status }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="IOT" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.iot_registered ? 'success' : 'info'" size="small">
-              {{ row.iot_registered ? '已注册' : '未注册' }}
+            <el-tag :type="row.iot_registered ? 'success' : 'info'" size="small" effect="light">
+              {{ row.iot_registered ? '✓ 已注册' : '○ 未注册' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="160">
+        <el-table-column label="入库时间" width="160">
           <template #default="{ row }">
-            {{ row.created_at ? row.created_at.substring(0, 19) : '-' }}
+            {{ formatTime(row.created_at || row.create_date) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" link @click="viewDevice(row)">
-              查看
+            <el-button size="small" type="primary" link @click="viewDevice(row)">查看</el-button>
+            <el-button size="small" type="success" link @click="registerToIot(row)">
+              {{ row.iot_registered ? '重新注册IOT' : '注册IOT' }}
             </el-button>
-            <el-button
-              v-if="!row.iot_registered"
-              size="small"
-              type="success"
-              link
-              @click="registerIot(row)"
-            >
-              注册IOT
-            </el-button>
-            <el-button size="small" type="warning" link @click="editImei(row)">
-              修改IMEI
-            </el-button>
-            <el-button
-              v-if="row.iot_registered"
-              size="small"
-              type="info"
-              link
-              @click="syncIot(row)"
-            >
-              同步IOT
-            </el-button>
-            <el-button size="small" type="danger" link @click="deleteDevice(row)">
-              删除
-            </el-button>
+            <el-button size="small" type="warning" link @click="showEditImeiDialog(row)">改IMEI</el-button>
+            <el-button size="small" type="info" link @click="syncFromIot(row)">同步IOT</el-button>
+            <el-button v-if="row.status === 'pending'" size="small" type="danger" link @click="deleteDevice(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -173,159 +166,239 @@
       </div>
     </el-card>
 
-    <!-- 添加设备对话框 -->
-    <el-dialog v-model="addDialogVisible" title="添加设备" width="550px">
-      <el-form
-        ref="addFormRef"
-        :model="addForm"
-        :rules="addRules"
-        label-width="100px"
-      >
-        <el-form-item label="设备编号" prop="device_number">
-          <el-input v-model="addForm.device_number" placeholder="请输入设备编号" />
+    <!-- 单个入库对话框 -->
+    <el-dialog v-model="registerDialogVisible" title="设备入库" width="600px" destroy-on-close>
+      <el-form ref="registerFormRef" :model="registerForm" :rules="registerRules" label-width="100px">
+        <el-divider content-position="left">设备硬件信息</el-divider>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="主板编码" prop="board_code">
+              <el-input v-model="registerForm.board_code" placeholder="如：88066491" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="IMEI" prop="imei">
+              <el-input v-model="registerForm.imei" placeholder="15位IMEI号" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="ICCID">
+              <el-input v-model="registerForm.iccid" placeholder="SIM卡ICCID（可选）" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="模块型号">
+              <el-select v-model="registerForm.module_code" placeholder="选择模块型号" style="width: 100%">
+                <el-option v-for="(label, key) in moduleLabels" :key="key" :label="label" :value="key" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-divider content-position="left">净水器信息</el-divider>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="品牌">
+              <el-select v-model="registerForm.brand" placeholder="选择品牌" style="width: 100%" filterable clearable @change="onBrandChange(registerForm)">
+                <el-option v-for="b in brands" :key="b.brand_code" :label="b.brand_name" :value="b.brand_name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="型号">
+              <el-select v-model="registerForm.device_model" placeholder="选择型号" style="width: 100%" filterable clearable allow-create>
+                <el-option v-for="m in getModelsForBrand(registerForm.brand)" :key="m.model_code" :label="m.model_name" :value="m.model_name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="备注">
+          <el-input v-model="registerForm.remark" type="textarea" :rows="2" placeholder="备注信息（可选）" />
         </el-form-item>
-        <el-form-item label="主板编码" prop="board_code">
-          <el-input v-model="addForm.board_code" placeholder="请输入主板编码" />
-        </el-form-item>
-        <el-form-item label="IMEI" prop="imei">
-          <el-input v-model="addForm.imei" placeholder="请输入设备IMEI号" />
-        </el-form-item>
-        <el-form-item label="ICCID">
-          <el-input v-model="addForm.iccid" placeholder="请输入ICCID" />
-        </el-form-item>
-        <el-form-item label="模块编码">
-          <el-input v-model="addForm.module_code" placeholder="请输入模块编码" />
-        </el-form-item>
-        <el-form-item label="品牌">
-          <el-select v-model="addForm.brand" placeholder="请选择品牌" style="width: 100%" clearable>
-            <el-option label="扬子" value="扬子" />
-            <el-option label="万达" value="万达" />
-            <el-option label="其他" value="其他" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="型号">
-          <el-select v-model="addForm.device_model" placeholder="请选择型号" style="width: 100%" clearable>
-            <el-option label="100G" value="100G" />
-            <el-option label="200G" value="200G" />
-            <el-option label="400G" value="400G" />
-            <el-option label="800G" value="800G" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="计费模式">
-          <el-select v-model="addForm.billing_mode" placeholder="请选择计费模式" style="width: 100%">
-            <el-option label="流量计费" value="flow" />
-            <el-option label="包年计费" value="time" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="客户姓名">
-          <el-input v-model="addForm.client_name" placeholder="请输入客户姓名" />
-        </el-form-item>
-        <el-form-item label="客户电话">
-          <el-input v-model="addForm.client_phone" placeholder="请输入客户电话" />
-        </el-form-item>
-        <el-form-item label="安装地址">
-          <el-input v-model="addForm.address" placeholder="请输入安装地址" />
+        <el-form-item label="同步IOT">
+          <el-switch v-model="registerForm.sync_to_iot" active-text="入库时同步注册到七云IOT平台" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitAdd">
-          确认添加
+        <el-button @click="registerDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitRegister">确认入库</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量入库对话框 -->
+    <el-dialog v-model="batchDialogVisible" title="批量设备入库" width="800px" destroy-on-close>
+      <el-tabs v-model="batchTabActive">
+        <!-- Excel文件上传 -->
+        <el-tab-pane label="Excel文件导入" name="excel">
+          <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
+            <template #title>
+              请上传七云提供的设备模板文件（.xlsx/.xls/.csv格式）<br/>
+              模板列：<code>主板编码(board_code), IMEI(imei), ICCID(iccid), 模块型号(module_code)</code>
+            </template>
+          </el-alert>
+
+          <el-form label-width="100px">
+            <el-form-item label="选择文件">
+              <el-upload
+                ref="uploadRef"
+                :auto-upload="false"
+                :limit="1"
+                accept=".xlsx,.xls,.csv"
+                :on-change="handleFileChange"
+                :on-remove="handleFileRemove"
+              >
+                <template #trigger>
+                  <el-button type="primary">
+                    <el-icon><Upload /></el-icon>
+                    选择文件
+                  </el-button>
+                </template>
+                <template #tip>
+                  <div class="el-upload__tip">支持 .xlsx / .xls / .csv 格式，文件大小不超过10MB</div>
+                </template>
+              </el-upload>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <!-- 手动输入 -->
+        <el-tab-pane label="手动输入" name="text">
+          <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
+            <template #title>
+              每行一个设备，格式：<code>主板编码,IMEI,ICCID(可选),模块型号(可选)</code><br/>
+              示例：<code>88066491,868292080628401,89860847112D046964,QY_QN4G</code>
+            </template>
+          </el-alert>
+
+          <el-input
+            v-model="batchForm.text"
+            type="textarea"
+            :rows="8"
+            placeholder="每行一个设备，格式：主板编码,IMEI,ICCID,模块型号"
+          />
+        </el-tab-pane>
+      </el-tabs>
+
+      <!-- 品牌/型号统一设置 -->
+      <el-divider content-position="left">批量设置（可选）</el-divider>
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-form-item label="统一品牌" label-width="80px">
+            <el-select v-model="batchForm.brand" placeholder="品牌" filterable clearable style="width: 100%" @change="onBrandChange(batchForm)">
+              <el-option v-for="b in brands" :key="b.brand_code" :label="b.brand_name" :value="b.brand_name" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="统一型号" label-width="80px">
+            <el-select v-model="batchForm.device_model" placeholder="型号" filterable clearable allow-create style="width: 100%">
+              <el-option v-for="m in getModelsForBrand(batchForm.brand)" :key="m.model_code" :label="m.model_name" :value="m.model_name" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="同步IOT" label-width="80px">
+            <el-switch v-model="batchForm.sync_to_iot" active-text="同步注册IOT" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <!-- 解析预览 -->
+      <div v-if="parsedDevices.length > 0" class="parsed-preview">
+        <div class="preview-header">
+          <el-icon style="color: #67c23a; margin-right: 5px;"><SuccessFilled /></el-icon>
+          解析成功：{{ parsedDevices.filter(d => d.valid).length }} / {{ parsedDevices.length }} 个有效设备
+        </div>
+        <el-table :data="parsedDevices" max-height="250" size="small" stripe>
+          <el-table-column type="index" width="50" label="#" />
+          <el-table-column prop="board_code" label="主板编码" width="110" />
+          <el-table-column prop="imei" label="IMEI" width="155" />
+          <el-table-column label="ICCID" width="175">
+            <template #default="{ row }">{{ row.iccid || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="module_code" label="模块" width="90" />
+          <el-table-column label="状态" width="80" fixed="right">
+            <template #default="{ row }">
+              <el-tag v-if="row.valid" type="success" size="small">有效</el-tag>
+              <el-tag v-else type="danger" size="small">{{ row.error || '无效' }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <!-- 入库结果 -->
+      <div v-if="batchResult" class="batch-result">
+        <el-result
+          :icon="batchResult.failed.length === 0 ? 'success' : 'warning'"
+          :title="batchResult.message"
+        >
+          <template #sub-title>
+            <div v-if="batchResult.failed.length > 0">
+              失败设备：
+              <ul style="text-align: left; max-height: 150px; overflow-y: auto;">
+                <li v-for="(item, index) in batchResult.failed" :key="index">
+                  {{ item.board_code }}: {{ item.reason }}
+                </li>
+              </ul>
+            </div>
+          </template>
+        </el-result>
+      </div>
+
+      <template #footer>
+        <el-button @click="batchDialogVisible = false">关闭</el-button>
+        <el-button v-if="batchTabActive === 'text' && parsedDevices.length === 0" type="info" @click="parseDevices">解析预览</el-button>
+        <el-button
+          type="primary"
+          :loading="submitting"
+          :disabled="parsedDevices.filter(d => d.valid).length === 0"
+          @click="submitBatchRegister"
+        >
+          确认入库 ({{ parsedDevices.filter(d => d.valid).length }} 个)
         </el-button>
       </template>
     </el-dialog>
 
-    <!-- 批量登记对话框 -->
-    <el-dialog v-model="batchDialogVisible" title="批量设备登记" width="700px">
-      <el-tabs v-model="batchTabActive">
-        <el-tab-pane label="Excel上传" name="excel">
-          <div class="batch-upload">
-            <el-upload
-              ref="uploadRef"
-              class="upload-demo"
-              drag
-              :action="API_BASE + '/devices/batch-import'"
-              :headers="uploadHeaders"
-              :before-upload="beforeExcelUpload"
-              :on-success="handleExcelSuccess"
-              :on-error="handleExcelError"
-              :limit="1"
-              accept=".xlsx,.xls"
-            >
-              <el-icon class="el-icon--upload"><Upload /></el-icon>
-              <div class="el-upload__text">
-                拖拽Excel文件到此处，或<em>点击上传</em>
-              </div>
-              <template #tip>
-                <div class="el-upload__tip">
-                  请上传Excel文件(.xlsx, .xls)，包含设备信息
-                </div>
-                <el-button size="small" type="primary" @click="downloadTemplate">
-                  下载模板
-                </el-button>
-              </template>
-            </el-upload>
-          </div>
-        </el-tab-pane>
-        <el-tab-pane label="文本输入" name="text">
-          <div class="batch-text">
-            <p class="text-tip">每行一个设备信息，格式：设备编号,主板编码,IMEI,ICCID,模块编码,品牌,型号</p>
-            <el-input
-              v-model="batchTextContent"
-              type="textarea"
-              :rows="10"
-              placeholder="例如：&#10;88026798,BOARD001,861234567890123,89860123456789012345,MOD001,扬子,100G&#10;88053880,BOARD002,861234567890124,89860123456789012346,MOD002,万达,200G"
-            />
-          </div>
-          <div style="margin-top: 16px; text-align: right;">
-            <el-button type="primary" :loading="batchSubmitting" @click="submitBatchText">
-              确认导入
-            </el-button>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </el-dialog>
-
     <!-- 修改IMEI对话框 -->
-    <el-dialog v-model="editImeiDialogVisible" title="修改IMEI" width="450px">
-      <el-form ref="editImeiFormRef" :model="editImeiForm" label-width="80px">
-        <el-form-item label="设备编号">
-          <el-input v-model="editImeiForm.device_number" disabled />
+    <el-dialog v-model="editImeiDialogVisible" title="修改设备IMEI" width="450px" destroy-on-close>
+      <el-form :model="editImeiForm" label-width="100px">
+        <el-form-item label="主板编码">
+          <el-input :value="editImeiForm.board_code" disabled />
         </el-form-item>
         <el-form-item label="当前IMEI">
-          <el-input v-model="editImeiForm.old_imei" disabled />
+          <el-input :value="editImeiForm.old_imei" disabled />
         </el-form-item>
-        <el-form-item label="新IMEI" prop="new_imei">
-          <el-input v-model="editImeiForm.new_imei" placeholder="请输入新IMEI" />
+        <el-form-item label="新IMEI" required>
+          <el-input v-model="editImeiForm.imei" placeholder="请输入新的IMEI" />
+        </el-form-item>
+        <el-form-item label="同步IOT">
+          <el-switch v-model="editImeiForm.sync_to_iot" active-text="同步更新IOT平台IMEI" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editImeiDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editImeiSubmitting" @click="submitEditImei">
-          确认修改
-        </el-button>
+        <el-button type="primary" :loading="submitting" @click="submitUpdateImei">确认修改</el-button>
       </template>
     </el-dialog>
 
     <!-- 设备详情对话框 -->
     <el-dialog v-model="detailDialogVisible" title="设备详情" width="650px">
       <el-descriptions :column="2" border v-if="currentDevice">
-        <el-descriptions-item label="设备编号">{{ currentDevice.device_number }}</el-descriptions-item>
-        <el-descriptions-item label="主板编码">{{ currentDevice.board_code || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="IMEI">{{ currentDevice.imei }}</el-descriptions-item>
+        <el-descriptions-item label="主板编码">{{ currentDevice.board_code || currentDevice.device_number }}</el-descriptions-item>
+        <el-descriptions-item label="IMEI">{{ currentDevice.imei || '-' }}</el-descriptions-item>
         <el-descriptions-item label="ICCID">{{ currentDevice.iccid || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="模块编码">{{ currentDevice.module_code || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="模块型号">{{ moduleLabels[currentDevice.module_code] || currentDevice.module_code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="品牌">{{ currentDevice.brand || '-' }}</el-descriptions-item>
         <el-descriptions-item label="型号">{{ currentDevice.device_model || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="设备类型">{{ currentDevice.device_type || '-' }}</el-descriptions-item>
         <el-descriptions-item label="计费模式">
           <el-tag :type="currentDevice.billing_mode === 'time' ? 'success' : 'primary'" size="small">
             {{ currentDevice.billing_mode === 'time' ? '包年计费' : '流量计费' }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="getStatusType(currentDevice.status)" size="small">
-            {{ currentDevice.status_text }}
+          <el-tag :type="statusType[currentDevice.status] || 'info'" size="small">
+            {{ statusText[currentDevice.status] || currentDevice.status }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="IOT注册">
@@ -333,17 +406,12 @@
             {{ currentDevice.iot_registered ? '已注册' : '未注册' }}
           </el-tag>
         </el-descriptions-item>
+        <el-descriptions-item label="剩余流量">{{ currentDevice.surplus_flow || 0 }} L</el-descriptions-item>
         <el-descriptions-item label="客户姓名">{{ currentDevice.client_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="客户电话">{{ currentDevice.client_phone || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="安装地址" :span="2">{{ currentDevice.address || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="剩余流量">{{ currentDevice.surplus_flow || 0 }} L</el-descriptions-item>
-        <el-descriptions-item label="累计净化">{{ currentDevice.cumulative_filtration_flow || 0 }} L</el-descriptions-item>
+        <el-descriptions-item label="安装地址" :span="2">{{ currentDevice.client_address || currentDevice.address || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="入库时间">{{ formatTime(currentDevice.created_at || currentDevice.create_date) }}</el-descriptions-item>
         <el-descriptions-item label="激活时间">{{ currentDevice.activate_date || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="服务到期">{{ currentDevice.service_end_time || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">
-          {{ currentDevice.created_at ? currentDevice.created_at.substring(0, 19) : '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ currentDevice.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>
@@ -353,463 +421,374 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Upload } from '@element-plus/icons-vue'
+import { Plus, Upload, Refresh, SuccessFilled } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
-// API基础路径
-const API_BASE = '/api/admin/v1'
+const API_BASE = '/api/admin/water-purifier'
 
-// 上传请求头
-const uploadHeaders = {
-  Authorization: 'Bearer ' + (localStorage.getItem('token') || '')
-}
-
-// 状态数据
+// 状态
 const loading = ref(false)
 const submitting = ref(false)
-const batchSubmitting = ref(false)
-const editImeiSubmitting = ref(false)
 const devices = ref([])
 const statistics = ref({
-  total_devices: 0,
-  pending_devices: 0,
-  activated_devices: 0,
-  iot_registered_devices: 0,
-  today_devices: 0,
-  this_month_devices: 0,
+  total: 0, pending: 0, activated: 0, installed: 0, locked: 0, fault: 0,
+  iot_registered: 0, today_registered: 0, this_month_registered: 0,
 })
 
-// 搜索表单
-const searchForm = reactive({
-  keyword: '',
-  status: '',
-  iot_registered: '',
-})
+// 品牌和型号
+const brands = ref([])
+const models = ref([])
 
-// 分页
-const pagination = reactive({
-  current_page: 1,
-  per_page: 15,
-  total: 0,
-})
+const moduleLabels = {
+  'QY_QN4G': '七云4G',
+  'CS_01': '常规4G',
+  'QY_WIFI': '七云WiFi',
+}
+
+const statusType = {
+  pending: 'info', installed: 'warning', activated: 'success', locked: 'danger', fault: 'danger',
+}
+const statusText = {
+  pending: '待激活', installed: '已安装', activated: '已激活', locked: '已锁定', fault: '故障',
+}
+
+// 搜索与分页
+const searchForm = reactive({ keyword: '', status: '' })
+const pagination = reactive({ current_page: 1, per_page: 15, total: 0 })
 
 // 对话框
-const addDialogVisible = ref(false)
+const registerDialogVisible = ref(false)
 const batchDialogVisible = ref(false)
-const batchTabActive = ref('excel')
-const batchTextContent = ref('')
 const editImeiDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const currentDevice = ref(null)
 
-// 添加表单
-const addFormRef = ref(null)
-const addForm = reactive({
-  device_number: '',
-  board_code: '',
-  imei: '',
-  iccid: '',
-  module_code: '',
-  brand: '',
-  device_model: '',
-  billing_mode: 'flow',
-  client_name: '',
-  client_phone: '',
-  address: '',
+// 单个入库表单
+const registerFormRef = ref(null)
+const registerForm = reactive({
+  board_code: '', imei: '', iccid: '', module_code: 'QY_QN4G',
+  brand: '', device_model: '', remark: '', sync_to_iot: true,
 })
-
-const addRules = {
-  device_number: [
-    { required: true, message: '请输入设备编号', trigger: 'blur' },
-  ],
-  imei: [
-    { required: true, message: '请输入IMEI', trigger: 'blur' },
-  ],
+const registerRules = {
+  board_code: [{ required: true, message: '请输入主板编码', trigger: 'blur' }],
+  imei: [{ required: true, message: '请输入IMEI', trigger: 'blur' }, { min: 15, max: 15, message: 'IMEI为15位', trigger: 'blur' }],
 }
 
-// 修改IMEI表单
-const editImeiFormRef = ref(null)
-const editImeiForm = reactive({
-  id: null,
-  device_number: '',
-  old_imei: '',
-  new_imei: '',
-})
+// 批量入库
+const batchTabActive = ref('excel')
+const batchForm = reactive({ text: '', sync_to_iot: true, brand: '', device_model: '' })
+const parsedDevices = ref([])
+const batchResult = ref(null)
+const uploadRef = ref(null)
 
-// 加载设备列表
+// 修改IMEI表单
+const editImeiForm = reactive({ device_id: null, board_code: '', old_imei: '', imei: '', sync_to_iot: true })
+
+// 获取品牌下的型号列表
+const getModelsForBrand = (brandName) => {
+  if (!brandName) return models.value
+  const brand = brands.value.find(b => b.brand_name === brandName)
+  if (!brand) return []
+  return models.value.filter(m => m.brand_id === brand.id)
+}
+
+const onBrandChange = (form) => { form.device_model = '' }
+
+const formatTime = (str) => {
+  if (!str) return '-'
+  return str.replace('T', ' ').substring(0, 19)
+}
+
+// ========== 数据加载 ==========
+
+const loadStatistics = async () => {
+  try {
+    const data = await request.get(`${API_BASE}/stock-statistics`)
+    if (data.code === 0) statistics.value = data.data
+  } catch (e) { console.error('加载统计失败:', e) }
+}
+
 const loadDevices = async () => {
   loading.value = true
   try {
-    const params = {
-      page: pagination.current_page,
-      per_page: pagination.per_page,
-      ...searchForm,
-    }
-    // 移除空值参数
-    Object.keys(params).forEach(key => {
-      if (params[key] === '' || params[key] === null || params[key] === undefined) {
-        delete params[key]
-      }
-    })
-
-    const data = await request.get(API_BASE + '/devices', { params })
+    const params = { page: pagination.current_page, per_page: pagination.per_page }
+    if (searchForm.keyword) params.keyword = searchForm.keyword
+    if (searchForm.status) params.status = searchForm.status
+    const data = await request.get(`${API_BASE}/`, { params })
     if (data.code === 0) {
-      devices.value = data.data.data || []
-      pagination.total = data.data.total || 0
-      if (data.data.statistics) {
-        statistics.value = {
-          total_devices: data.data.statistics.total_devices || 0,
-          pending_devices: data.data.statistics.pending_devices || 0,
-          activated_devices: data.data.statistics.activated_devices || 0,
-          iot_registered_devices: data.data.statistics.iot_registered_devices || 0,
-          today_devices: data.data.statistics.today_devices || 0,
-          this_month_devices: data.data.statistics.this_month_devices || 0,
-        }
-      }
+      devices.value = data.data || []
+      pagination.total = data.meta?.total || 0
     }
-  } catch (error) {
+  } catch (e) {
     ElMessage.error('加载设备列表失败')
-    console.error(error)
   } finally {
     loading.value = false
   }
 }
 
-// 重置搜索
-const resetSearch = () => {
-  searchForm.keyword = ''
-  searchForm.status = ''
-  searchForm.iot_registered = ''
-  pagination.current_page = 1
-  loadDevices()
+const loadBrandsAndModels = async () => {
+  try {
+    const data = await request.get(`${API_BASE}/brands-models`)
+    if (data.code === 0 && data.data) {
+      brands.value = data.data.brands || []
+      models.value = data.data.models || []
+    }
+  } catch (e) {
+    // 使用默认数据
+    brands.value = [
+      { id: 1, brand_name: '华迈', brand_code: 'HUAMAI' },
+      { id: 2, brand_name: '净之泉', brand_code: 'JINGZHIQUAN' },
+      { id: 3, brand_name: '沃特佳', brand_code: 'WOTEJIA' },
+      { id: 4, brand_name: '万达', brand_code: 'WANDA' },
+    ]
+    models.value = [
+      { id: 1, brand_id: 1, model_name: '大扁豆', model_code: 'DABIANDOU' },
+      { id: 2, brand_id: 1, model_name: '屠龙', model_code: 'TULONG' },
+      { id: 3, brand_id: 2, model_name: '小扁豆', model_code: 'XIAOBIANDOU' },
+      { id: 4, brand_id: 2, model_name: '商务机', model_code: 'SHANGWUJI' },
+    ]
+  }
 }
 
-// 显示添加对话框
-const showAddDialog = () => {
-  addForm.device_number = ''
-  addForm.board_code = ''
-  addForm.imei = ''
-  addForm.iccid = ''
-  addForm.module_code = ''
-  addForm.brand = ''
-  addForm.device_model = ''
-  addForm.billing_mode = 'flow'
-  addForm.client_name = ''
-  addForm.client_phone = ''
-  addForm.address = ''
-  addDialogVisible.value = true
+const loadAll = () => { loadStatistics(); loadDevices() }
+
+// ========== 单个入库 ==========
+
+const showRegisterDialog = () => {
+  Object.assign(registerForm, { board_code: '', imei: '', iccid: '', module_code: 'QY_QN4G', brand: '', device_model: '', remark: '', sync_to_iot: true })
+  registerDialogVisible.value = true
 }
 
-// 提交添加
-const submitAdd = async () => {
-  await addFormRef.value?.validate()
-
+const submitRegister = async () => {
+  await registerFormRef.value?.validate()
   submitting.value = true
   try {
-    const postData = { ...addForm }
-    const data = await request.post(API_BASE + '/devices', postData)
+    const data = await request.post(`${API_BASE}/register`, registerForm)
     if (data.code === 0) {
-      ElMessage.success('设备添加成功')
-      addDialogVisible.value = false
-      loadDevices()
+      ElMessage.success(data.message || '设备入库成功')
+      // 显示IOT结果
+      if (registerForm.sync_to_iot && data.data?.iot_result) {
+        const ir = data.data.iot_result
+        await ElMessageBox.alert(
+          `<div style="text-align:left;">
+            <p><strong>主板编码:</strong> ${registerForm.board_code}</p>
+            <p><strong>IMEI:</strong> ${registerForm.imei}</p>
+            <p><strong>IOT状态:</strong> <span style="color:${ir.code == 0 ? '#67c23a' : '#f56c6c'};font-weight:bold;">${ir.code == 0 ? '✓ 注册成功' : '✗ 注册失败'}</span></p>
+            <p><strong>IOT返回:</strong></p>
+            <pre style="background:#f5f7fa;padding:8px;font-size:12px;border-radius:4px;max-height:150px;overflow:auto;">${JSON.stringify(ir, null, 2)}</pre>
+          </div>`, 'IOT注册结果',
+          { dangerouslyUseHTMLString: true, confirmButtonText: '确定', type: ir.code == 0 ? 'success' : 'warning' }
+        )
+      }
+      registerDialogVisible.value = false
+      loadAll()
     } else {
-      ElMessage.error(data.message || '添加失败')
+      ElMessage.error(data.message || '入库失败')
     }
-  } catch (error) {
-    ElMessage.error(error.response?.data?.message || '操作失败')
+  } catch (e) {
+    ElMessage.error(e.response?.data?.message || '操作失败')
   } finally {
     submitting.value = false
   }
 }
 
-// 显示批量登记对话框
+// ========== 批量入库 ==========
+
 const showBatchDialog = () => {
-  batchTextContent.value = ''
   batchTabActive.value = 'excel'
+  batchForm.text = ''
+  batchForm.sync_to_iot = true
+  batchForm.brand = ''
+  batchForm.device_model = ''
+  parsedDevices.value = []
+  batchResult.value = null
   batchDialogVisible.value = true
+  uploadRef.value?.clearFiles()
 }
 
-// Excel上传前
-const beforeExcelUpload = (file) => {
-  const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
-  const isLt10M = file.size / 1024 / 1024 < 10
-
-  if (!isExcel) {
-    ElMessage.error('只能上传Excel文件(.xlsx, .xls)')
-    return false
-  }
-  if (!isLt10M) {
-    ElMessage.error('文件大小不能超过10MB')
-    return false
-  }
-  return true
-}
-
-// Excel上传成功
-const handleExcelSuccess = (response) => {
-  if (response.code === 0) {
-    ElMessage.success(`成功导入 ${response.data.success_count || 0} 条设备`)
-    batchDialogVisible.value = false
-    loadDevices()
-  } else {
-    ElMessage.error(response.message || '导入失败')
-  }
-}
-
-// Excel上传失败
-const handleExcelError = (err) => {
-  ElMessage.error('Excel导入失败: ' + (err.message || '未知错误'))
-}
-
-// 下载模板
-const downloadTemplate = () => {
-  window.open(API_BASE + '/devices/template', '_blank')
-}
-
-// 提交批量文本
-const submitBatchText = async () => {
-  if (!batchTextContent.value.trim()) {
-    ElMessage.warning('请输入设备信息')
-    return
-  }
-
-  batchSubmitting.value = true
+const handleFileChange = async (file) => {
+  if (!file?.raw) return
+  parsedDevices.value = []
+  batchResult.value = null
   try {
-    const lines = batchTextContent.value.trim().split('\n').filter(l => l.trim())
-    const devices_data = lines.map(line => {
-      const parts = line.split(',').map(p => p.trim())
-      return {
-        device_number: parts[0] || '',
-        board_code: parts[1] || '',
-        imei: parts[2] || '',
-        iccid: parts[3] || '',
-        module_code: parts[4] || '',
-        brand: parts[5] || '',
-        device_model: parts[6] || '',
-      }
+    const formData = new FormData()
+    formData.append('file', file.raw)
+    const data = await request.post(`${API_BASE}/parse-excel`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
     })
-
-    const data = await request.post(API_BASE + '/devices/batch-text', { devices: devices_data })
     if (data.code === 0) {
-      ElMessage.success(`成功导入 ${data.data.success_count || 0} 条设备`)
-      batchDialogVisible.value = false
-      loadDevices()
+      parsedDevices.value = (data.data.devices || []).map(d => ({
+        ...d, valid: !!(d.board_code && d.imei), error: (!d.board_code || !d.imei) ? '缺少必填字段' : null,
+      }))
+      ElMessage.success(`成功解析 ${data.data.devices.length} 个设备`)
     } else {
-      ElMessage.error(data.message || '导入失败')
+      ElMessage.error(data.message || '解析失败')
     }
-  } catch (error) {
-    ElMessage.error(error.response?.data?.message || '导入失败')
-  } finally {
-    batchSubmitting.value = false
+  } catch (e) {
+    ElMessage.error('文件解析失败')
   }
 }
 
-// 查看设备
-const viewDevice = (device) => {
-  currentDevice.value = device
-  detailDialogVisible.value = true
+const handleFileRemove = () => { parsedDevices.value = []; batchResult.value = null }
+
+const parseDevices = () => {
+  const lines = batchForm.text.trim().split('\n').filter(l => l.trim())
+  parsedDevices.value = lines.map(line => {
+    const parts = line.split(',').map(p => p.trim())
+    const d = { board_code: parts[0] || '', imei: parts[1] || '', iccid: parts[2] || '', module_code: parts[3] || 'QY_QN4G' }
+    d.valid = !!(d.board_code && d.imei)
+    d.error = d.valid ? null : '缺少必填字段'
+    return d
+  })
 }
 
-// 注册IOT
-const registerIot = async (device) => {
+watch(() => batchForm.text, (val) => { if (val) parseDevices(); else parsedDevices.value = [] })
+
+const submitBatchRegister = async () => {
+  const validDevices = parsedDevices.value.filter(d => d.valid)
+  if (validDevices.length === 0) return ElMessage.warning('没有有效的设备数据')
+
+  submitting.value = true
   try {
-    await ElMessageBox.confirm(
-      `确定要为设备 ${device.device_number} 注册IOT吗？`,
-      '注册IOT',
-      { type: 'info' }
-    )
-
-    const data = await request.post(API_BASE + '/devices/' + device.id + '/register-iot')
+    const data = await request.post(`${API_BASE}/batch-register`, {
+      devices: validDevices.map(d => ({
+        board_code: d.board_code, imei: d.imei, iccid: d.iccid, module_code: d.module_code,
+        brand: batchForm.brand, device_model: batchForm.device_model,
+      })),
+      sync_to_iot: batchForm.sync_to_iot,
+    })
     if (data.code === 0) {
-      ElMessage.success('IOT注册成功')
-      loadDevices()
+      batchResult.value = { message: data.message, success: data.data.success || [], failed: data.data.failed || [] }
+      loadAll()
     } else {
-      ElMessage.error(data.message || '注册失败')
+      ElMessage.error(data.message || '批量入库失败')
     }
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.message || '注册失败')
-    }
+  } catch (e) {
+    ElMessage.error('操作失败')
+  } finally {
+    submitting.value = false
   }
 }
 
-// 修改IMEI
-const editImei = (device) => {
-  editImeiForm.id = device.id
-  editImeiForm.device_number = device.device_number
+// ========== IOT操作 ==========
+
+const registerToIot = async (device) => {
+  const loadingMsg = ElMessage({ message: '正在注册到七云IOT平台...', type: 'info', duration: 0 })
+  try {
+    const data = await request.post(`${API_BASE}/${device.id}/register-iot`)
+    loadingMsg.close()
+    const ir = data.data?.iot_result || {}
+    await ElMessageBox.alert(
+      `<div style="text-align:left;">
+        <p><strong>主板编码:</strong> ${device.board_code || device.device_number}</p>
+        <p><strong>IMEI:</strong> ${device.imei}</p>
+        <p><strong>注册状态:</strong> <span style="color:${data.code === 0 ? '#67c23a' : '#f56c6c'};font-weight:bold;">${data.code === 0 ? '✓ 成功' : '✗ 失败'}</span></p>
+        <p>${data.message || ''}</p>
+        <pre style="background:#f5f7fa;padding:8px;font-size:12px;border-radius:4px;max-height:200px;overflow:auto;">${JSON.stringify(ir, null, 2)}</pre>
+      </div>`, 'IOT注册结果',
+      { dangerouslyUseHTMLString: true, type: data.code === 0 ? 'success' : 'error' }
+    )
+    loadAll()
+  } catch (e) {
+    loadingMsg.close()
+    ElMessage.error('IOT注册请求失败')
+  }
+}
+
+const syncFromIot = async (device) => {
+  const loadingMsg = ElMessage({ message: '正在从七云IOT同步数据...', type: 'info', duration: 0 })
+  try {
+    const data = await request.post(`${API_BASE}/${device.id}/sync-iot`)
+    loadingMsg.close()
+    if (data.code === 0) {
+      await ElMessageBox.alert(
+        `<pre style="background:#f5f7fa;padding:10px;font-size:12px;border-radius:4px;max-height:300px;overflow:auto;">${JSON.stringify(data.data?.iot_result || {}, null, 2)}</pre>`,
+        'IOT同步结果', { dangerouslyUseHTMLString: true, type: 'success' }
+      )
+      loadAll()
+    } else {
+      ElMessage.error(data.message || '同步失败')
+    }
+  } catch (e) {
+    loadingMsg.close()
+    ElMessage.error('同步请求失败')
+  }
+}
+
+// ========== IMEI修改 ==========
+
+const showEditImeiDialog = (device) => {
+  editImeiForm.device_id = device.id
+  editImeiForm.board_code = device.board_code || device.device_number
   editImeiForm.old_imei = device.imei
-  editImeiForm.new_imei = ''
+  editImeiForm.imei = ''
+  editImeiForm.sync_to_iot = !!device.iot_registered
   editImeiDialogVisible.value = true
 }
 
-// 提交修改IMEI
-const submitEditImei = async () => {
-  if (!editImeiForm.new_imei.trim()) {
-    ElMessage.warning('请输入新IMEI')
-    return
-  }
-
-  editImeiSubmitting.value = true
+const submitUpdateImei = async () => {
+  if (!editImeiForm.imei) return ElMessage.warning('请输入新的IMEI')
+  submitting.value = true
   try {
-    const data = await request.put(API_BASE + '/devices/' + editImeiForm.id + '/imei', {
-      imei: editImeiForm.new_imei
+    const data = await request.post(`${API_BASE}/${editImeiForm.device_id}/update-imei`, {
+      imei: editImeiForm.imei, sync_to_iot: editImeiForm.sync_to_iot,
     })
     if (data.code === 0) {
-      ElMessage.success('IMEI修改成功')
+      ElMessage.success(data.message || 'IMEI修改成功')
       editImeiDialogVisible.value = false
       loadDevices()
     } else {
       ElMessage.error(data.message || '修改失败')
     }
-  } catch (error) {
-    ElMessage.error(error.response?.data?.message || '修改失败')
+  } catch (e) {
+    ElMessage.error('操作失败')
   } finally {
-    editImeiSubmitting.value = false
+    submitting.value = false
   }
 }
 
-// 同步IOT
-const syncIot = async (device) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定为设备 ${device.device_number} 同步IOT数据吗？`,
-      '同步IOT',
-      { type: 'info' }
-    )
+// ========== 其他操作 ==========
 
-    const data = await request.post(API_BASE + '/devices/' + device.id + '/sync-iot')
-    if (data.code === 0) {
-      ElMessage.success('IOT同步成功')
-      loadDevices()
-    } else {
-      ElMessage.error(data.message || '同步失败')
-    }
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.message || '同步失败')
-    }
-  }
-}
+const viewDevice = (device) => { currentDevice.value = device; detailDialogVisible.value = true }
 
-// 删除设备
 const deleteDevice = async (device) => {
-  await ElMessageBox.confirm(
-    `确定要删除设备 ${device.device_number} 吗？此操作不可恢复。`,
-    '确认删除',
-    { type: 'warning' }
-  )
-
+  await ElMessageBox.confirm(`确定要删除设备 ${device.board_code || device.device_number} 吗？此操作不可恢复。`, '确认删除', { type: 'warning' })
   try {
-    const data = await request.delete(API_BASE + '/devices/' + device.id)
-    if (data.code === 0) {
-      ElMessage.success('删除成功')
-      loadDevices()
-    } else {
-      ElMessage.error(data.message || '删除失败')
-    }
-  } catch (error) {
-    ElMessage.error(error.response?.data?.message || '删除失败')
+    const data = await request.delete(`${API_BASE}/${device.id}`)
+    if (data.code === 0) { ElMessage.success('删除成功'); loadAll() }
+    else ElMessage.error(data.message || '删除失败')
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error('删除失败')
   }
 }
 
-// 状态相关函数
-const getStatusType = (status) => {
-  const types = {
-    'pending': 'info',
-    'assigned': 'warning',
-    'installed': 'warning',
-    'activated': 'success',
-    'disabled': 'danger',
-  }
-  return types[status] || 'info'
-}
+const resetSearch = () => { searchForm.keyword = ''; searchForm.status = ''; pagination.current_page = 1; loadDevices() }
 
 // 初始化
-onMounted(() => {
-  loadDevices()
-})
+onMounted(() => { loadStatistics(); loadDevices(); loadBrandsAndModels() })
 </script>
 
 <style scoped>
-.device-stock-page {
-  padding: 20px;
-}
-
-.stats-row {
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  text-align: center;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: bold;
-  color: #303133;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #909399;
-  margin-top: 8px;
-}
-
-.stat-pending .stat-value { color: #e6a23c; }
+.device-stock-page { padding: 20px; }
+.stats-row { margin-bottom: 20px; }
+.stat-card { text-align: center; cursor: pointer; transition: transform 0.2s; }
+.stat-card:hover { transform: translateY(-2px); }
+.stat-value { font-size: 28px; font-weight: bold; color: #303133; }
+.stat-label { font-size: 14px; color: #909399; margin-top: 8px; }
+.stat-pending .stat-value { color: #909399; }
 .stat-activated .stat-value { color: #67c23a; }
 .stat-iot .stat-value { color: #409eff; }
-.stat-today .stat-value { color: #f56c6c; }
-.stat-month .stat-value { color: #9c27b0; }
-
-.main-card {
-  margin-bottom: 20px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.search-form {
-  margin-bottom: 16px;
-}
-
-.pagination-wrap {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.batch-upload {
-  padding: 20px;
-}
-
-.batch-text {
-  padding: 16px 0;
-}
-
-.text-tip {
-  margin-bottom: 12px;
-  color: #909399;
-  font-size: 13px;
-}
-
-.el-upload__tip {
-  margin-top: 8px;
-  color: #909399;
-}
+.stat-today .stat-value { color: #e6a23c; }
+.stat-month .stat-value { color: #f56c6c; }
+.main-card { margin-bottom: 20px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; }
+.header-actions { display: flex; gap: 8px; }
+.search-form { margin-bottom: 16px; }
+.pagination-wrap { margin-top: 16px; display: flex; justify-content: flex-end; }
+.parsed-preview { margin-top: 16px; border: 1px solid #ebeef5; border-radius: 4px; }
+.preview-header { padding: 10px 16px; background: #f5f7fa; font-weight: 500; display: flex; align-items: center; }
+.batch-result { margin-top: 16px; }
+.batch-result ul { text-align: left; margin: 10px 0; padding-left: 20px; }
 </style>

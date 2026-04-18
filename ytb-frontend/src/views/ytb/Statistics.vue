@@ -129,7 +129,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="direct_user_count" label="直推用户" width="90" />
+            <el-table-column prop="direct_scp_count" label="直推用户" width="90" />
             <el-table-column label="总分佣" width="100">
               <template #default="{ row }">
                 ¥{{ formatMoney(row.total_commission) }}
@@ -479,7 +479,7 @@ const loadRevenueTrend = async () => {
           {
             name: '收入',
             type: 'bar',
-            data: data.map(item => item.revenue),
+            data: data.map(item => item.total),
             itemStyle: {
               color: '#67c23a'
             }

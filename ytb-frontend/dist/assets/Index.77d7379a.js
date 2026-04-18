@@ -1,1 +1,0 @@
-import{ag as o,H as t,L as _,M as s}from"./vendor-vue.ebe3bb33.js";import{_ as n}from"./main.ae909b70.js";import"./vendor-element.96775fb8.js";import"./vendor-utils.697f0497.js";const r={class:"mall-config"},c={__name:"Index",setup(a){return(p,m)=>{const e=o("router-view");return t(),_("div",r,[s(e)])}}},v=n(c,[["__scopeId","data-v-43064be5"]]);export{v as default};

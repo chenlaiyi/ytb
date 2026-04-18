@@ -56,7 +56,7 @@
               </div>
               <div class="device-details">
                 <div class="device-name">{{ device.client_name || '用户姓名' }}</div>
-                <div class="device-number">设备编号：{{ device.device_id }}</div>
+                <div class="device-number">设备编号：{{ getDeviceNumber(device) }}</div>
                 <div class="device-address" v-if="device.location">{{ device.location }}</div>
                 <!-- 安装师傅信息 -->
                 <div class="device-master" v-if="device.master_info && (device.master_info.master_name || device.master_info.master_phone)">
@@ -117,7 +117,7 @@
           <div class="device-info-section">
             <div class="info-item">
               <span class="label">设备编号：</span>
-              <span class="value">{{ currentDevice?.device_id }}</span>
+              <span class="value">{{ getDeviceNumber(currentDevice) }}</span>
             </div>
             <div class="info-item">
               <span class="label">在线状态：</span>
@@ -210,6 +210,11 @@ const loading = ref(false)
 const showControlPopup = ref(false)
 const currentDevice = ref(null)
 
+const getDeviceNumber = (device) => {
+  if (!device) return '未设置'
+  return device.device_number || device.board_code || device.device_id || device.sn || '未设置'
+}
+
 // 设备统计数据
 const deviceStats = computed(() => {
   const stats = { selfUse: 0, sale: 0, waterPoint: 0 }
@@ -246,7 +251,7 @@ const controlDevice = async (command) => {
 
     const res = await apiControlDevice(currentDevice.value.id, {
       command: command,
-      device_number: currentDevice.value.device_id
+      device_number: getDeviceNumber(currentDevice.value)
     })
 
     Toast.clear()

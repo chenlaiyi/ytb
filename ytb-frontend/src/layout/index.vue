@@ -395,7 +395,7 @@ export default {
             title: '用户管理',
             meta: { title: '用户管理', icon: 'UserFilled' },
             children: [
-              { id: 'app-users', meta: { title: 'APP用户管理', icon: 'User' }, path: '/users/app-users' },
+              { id: 'app-users', meta: { title: '用户', icon: 'User' }, path: '/users/app-users' },
               { id: 'vip-members', meta: { title: 'VIP会员', icon: 'UserFilled' }, path: '/users/vip-members' }
             ]
           };
@@ -496,7 +496,7 @@ export default {
           title: '用户管理',
           meta: { title: '用户管理', icon: 'UserFilled' },
           children: [
-            { id: 'app-users', meta: { title: 'APP用户管理', icon: 'User' }, path: '/users/app-users' },
+            { id: 'app-users', meta: { title: '用户', icon: 'User' }, path: '/users/app-users' },
             { id: 'vip-members', meta: { title: 'VIP会员', icon: 'UserFilled' }, path: '/users/vip-members' }
           ]
         };

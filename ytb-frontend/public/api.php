@@ -350,8 +350,15 @@ function saveYtbUserByWechat($db, $wechatUser) {
     $nickname = $wechatUser['nickname'] ?? ('微信用户' . substr(md5($openid), 0, 6));
     $avatar = $wechatUser['headimgurl'] ?? '';
 
-    $stmt = $db->prepare('SELECT * FROM ytb_users WHERE openid = ? LIMIT 1');
-    $stmt->execute([$openid]);
+    // 尝试通过 unionid 或者 openid 查找存量用户
+    if ($unionid) {
+        $stmt = $db->prepare('SELECT * FROM ytb_users WHERE unionid = ? OR openid = ? ORDER BY id ASC LIMIT 1');
+        $stmt->execute([$unionid, $openid]);
+    } else {
+        $stmt = $db->prepare('SELECT * FROM ytb_users WHERE openid = ? LIMIT 1');
+        $stmt->execute([$openid]);
+    }
+    
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($user) {
@@ -436,6 +443,7 @@ try {
                 'phone' => $user['phone'] ?? '',
                 'real_name' => $user['real_name'] ?? '',
                 'role' => $user['role'] ?? 'normal',
+                'is_engineer' => (bool)($user['is_engineer'] ?? false),
                 'invite_code' => $user['invite_code'] ?? '',
                 'available_balance' => $user['available_balance'] ?? '0.00',
                 'frozen_balance' => $user['frozen_balance'] ?? '0.00',
@@ -457,7 +465,7 @@ try {
         }
         $updates = [];
         $params = [];
-        foreach (['nickname', 'real_name', 'phone'] as $field) {
+        foreach (['nickname', 'real_name', 'phone', 'avatar'] as $field) {
             if (isset($input[$field])) {
                 $updates[] = "$field = ?";
                 $params[] = $input[$field];
@@ -471,6 +479,52 @@ try {
             $stmt->execute($params);
         }
         echo json_encode(['code' => 0, 'message' => '更新成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // YTB 头像上传
+    if ($path === 'ytb/upload-avatar' && $method === 'POST') {
+        $user = authenticateYtbUser($db, $token);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode(['code' => 400, 'message' => '上传失败'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $fileType = mime_content_type($_FILES['file']['tmp_name']);
+        if (!in_array($fileType, $allowedTypes)) {
+            echo json_encode(['code' => 400, 'message' => '不支持的图片格式'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $ext = pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION) ?: 'jpg';
+        $filename = 'avatar_' . $user['id'] . '_' . time() . '.' . $ext;
+        $uploadDir = __DIR__ . '/uploads/avatars/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $targetPath = $uploadDir . $filename;
+        if (move_uploaded_file($_FILES['file']['tmp_name'], $targetPath)) {
+            $avatarUrl = 'https://ytb.ddg.org.cn/uploads/avatars/' . $filename;
+            // 同时更新数据库
+            $stmt = $db->prepare('UPDATE ytb_users SET avatar = ?, updated_at = NOW() WHERE id = ?');
+            $stmt->execute([$avatarUrl, $user['id']]);
+
+            echo json_encode([
+                'code' => 0,
+                'message' => '上传成功',
+                'data' => ['url' => $avatarUrl]
+            ], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo json_encode(['code' => 500, 'message' => '文件保存失败'], JSON_UNESCAPED_UNICODE);
+        }
         exit;
     }
 
@@ -522,10 +576,12 @@ try {
                 if ($deviceNumber) {
                     try {
                         $tappDb = getTappDB();
-                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, last_sync_at FROM qiyun_devices WHERE board_code = ? LIMIT 1");
+                        // 从 qiyun_devices 获取在线状态、品牌、流量、滤芯等完整数据
+                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, last_sync_at, cumulative_flow, surplus_flow, total_recharged_flow, f1_flux, f1_flux_max, f2_flux, f2_flux_max, f3_flux, f3_flux_max, f4_flux, f4_flux_max FROM qiyun_devices WHERE board_code = ? LIMIT 1");
                         $qdStmt->execute([$deviceNumber]);
                         $qd = $qdStmt->fetch(PDO::FETCH_ASSOC) ?: [];
                         
+                        // tapp_devices 作为补充数据源
                         $tdStmt = $tappDb->prepare("SELECT * FROM tapp_devices WHERE device_number = ? LIMIT 1");
                         $tdStmt->execute([$deviceNumber]);
                         $td = $tdStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -538,10 +594,50 @@ try {
                     $is_online = (time() - strtotime($qd['last_sync_at'])) < 300;
                 }
 
-                $fl1 = !empty($td['f1_flux_max']) && $td['f1_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f1_flux']??0) / $td['f1_flux_max']) * 100))) : 100;
-                $fl2 = !empty($td['f2_flux_max']) && $td['f2_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f2_flux']??0) / $td['f2_flux_max']) * 100))) : 100;
-                $fl3 = !empty($td['f3_flux_max']) && $td['f3_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f3_flux']??0) / $td['f3_flux_max']) * 100))) : 100;
-                $fl4 = !empty($td['f4_flux_max']) && $td['f4_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f4_flux']??0) / $td['f4_flux_max']) * 100))) : 100;
+                // 滤芯寿命：优先 qiyun_devices，fallback tapp_devices
+                $f1flux = $qd['f1_flux'] ?? $td['f1_flux'] ?? 0;
+                $f1max  = $qd['f1_flux_max'] ?? $td['f1_flux_max'] ?? 0;
+                $f2flux = $qd['f2_flux'] ?? $td['f2_flux'] ?? 0;
+                $f2max  = $qd['f2_flux_max'] ?? $td['f2_flux_max'] ?? 0;
+                $f3flux = $qd['f3_flux'] ?? $td['f3_flux'] ?? 0;
+                $f3max  = $qd['f3_flux_max'] ?? $td['f3_flux_max'] ?? 0;
+                $f4flux = $qd['f4_flux'] ?? $td['f4_flux'] ?? 0;
+                $f4max  = $qd['f4_flux_max'] ?? $td['f4_flux_max'] ?? 0;
+
+                $fl1 = !empty($f1max) && $f1max > 0 ? max(0, min(100, round((1 - $f1flux / $f1max) * 100))) : 100;
+                $fl2 = !empty($f2max) && $f2max > 0 ? max(0, min(100, round((1 - $f2flux / $f2max) * 100))) : 100;
+                $fl3 = !empty($f3max) && $f3max > 0 ? max(0, min(100, round((1 - $f3flux / $f3max) * 100))) : 100;
+                $fl4 = !empty($f4max) && $f4max > 0 ? max(0, min(100, round((1 - $f4flux / $f4max) * 100))) : 100;
+
+                $remaining_days = 0;
+                if (!empty($d['service_end_date'])) {
+                    $days = floor((strtotime($d['service_end_date']) - time()) / 86400);
+                    $remaining_days = $days > 0 ? $days : 0;
+                }
+
+                // 剩余流量：优先 qiyun > tapp > ytb
+                $realSurplusFlow = (float)($qd['surplus_flow'] ?? $td['surplus_flow'] ?? $d['surplus_flow'] ?? 0);
+
+                // 累计用水量计算（多级 fallback）：
+                // 1. qiyun cumulative_flow（如果 > 0）
+                // 2. tapp cumulative_filtration_flow（如果 > 0）
+                // 3. qiyun total_recharged_flow - surplus_flow（计算得出）
+                // 4. ytb cumulative_flow（最后 fallback）
+                $totalWater = 0;
+                $qdCumFlow = (float)($qd['cumulative_flow'] ?? 0);
+                $tdCumFlow = (float)($td['cumulative_filtration_flow'] ?? 0);
+                $qdTotalRecharged = (float)($qd['total_recharged_flow'] ?? 0);
+                $qdSurplus = (float)($qd['surplus_flow'] ?? 0);
+
+                if ($qdCumFlow > 0) {
+                    $totalWater = $qdCumFlow;
+                } elseif ($tdCumFlow > 0) {
+                    $totalWater = $tdCumFlow;
+                } elseif ($qdTotalRecharged > 0 && $qdSurplus >= 0) {
+                    $totalWater = max(0, $qdTotalRecharged - $qdSurplus);
+                } else {
+                    $totalWater = (float)($d['cumulative_flow'] ?? 0);
+                }
 
                 $deviceData = [
                     'id' => (int)$d['id'],
@@ -559,24 +655,39 @@ try {
                     'iccid' => $d['iccid'] ?? '',
                     'is_primary' => 1,
                     'billing_mode' => $billing_mode,
-                    'surplus_flow' => (float)($d['surplus_flow'] ?? 0),
-                    'remaining_days' => 0,
-                    'total_water' => (float)($d['cumulative_flow'] ?? 0),
+                    'surplus_flow' => $realSurplusFlow,
+                    'remaining_days' => $remaining_days,
+                    'total_water' => round($totalWater, 1),
                     'today_water' => 0,
                     'month_water' => 0,
                     'is_online' => $is_online,
                     'network_status' => $is_online ? 'online' : 'offline',
                     'is_power_on' => $is_online,
                     'has_fault' => false,
-                    'is_activated' => !empty($d['activate_date']),
-                    'raw_water_value' => (float)($d['raw_water_tds'] ?? 0),
-                    'purification_water_value' => (float)($d['pure_water_tds'] ?? 0),
+                    'is_activated' => !empty($d['activate_date']) || !empty($d['service_end_date']),
+                    'raw_water_value' => (float)($qd['raw_water_tds'] ?? $d['raw_water_tds'] ?? 0),
+                    'purification_water_value' => (float)($qd['pure_water_tds'] ?? $d['pure_water_tds'] ?? 0),
                     'signal_intensity' => $d['signal_strength'] ?? 0,
                     'service_end_date' => $d['service_end_date'] ?? '',
-                    'last_online_at' => $td['last_sync_time'] ?? '',
-                    'used_days' => !empty($d['activate_date']) ? floor((time() - strtotime($d['activate_date'])) / 86400) : 0,
-                    'bind_time' => $d['activate_date'] ?? $d['create_date'] ?? '',
-                    'activate_date' => $d['activate_date'] ?? '',
+                    'last_online_at' => $qd['last_sync_at'] ?? $td['last_sync_time'] ?? '',
+                    'used_days' => (function() use ($d) {
+                        // 优先用 activate_date 计算使用天数
+                        $startDate = $d['activate_date'] ?: $d['create_date'] ?? null;
+                        if (!empty($startDate)) {
+                            $days = floor((time() - strtotime($startDate)) / 86400);
+                            return max(0, $days);
+                        }
+                        // 如果都为空，从 service_end_date 反推（包年模式一般365天）
+                        if (!empty($d['service_end_date'])) {
+                            $endTs = strtotime($d['service_end_date']);
+                            $totalServiceDays = 365; // 默认包年365天
+                            $remaining = floor(($endTs - time()) / 86400);
+                            return max(0, $totalServiceDays - max(0, $remaining));
+                        }
+                        return 0;
+                    })(),
+                    'bind_time' => $d['activate_date'] ?: ($d['create_date'] ?? ''),
+                    'activate_date' => $d['activate_date'] ?: ($d['create_date'] ?? ''),
                     'filters' => [
                        ['name' => 'PP棉滤芯', 'life' => $fl1],
                        ['name' => '前置活性炭', 'life' => $fl2],
@@ -634,7 +745,7 @@ try {
             $listStmt->execute([$userId]);
             $rawDevices = $listStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // 从 qiyun_devices 获取实时在线状态
+            // 从 qiyun_devices 获取实时在线状态和套餐数据
             $qiyunDeviceMap = [];
             if (!empty($rawDevices)) {
                 $deviceNumbers = array_filter(array_column($rawDevices, 'device_number'));
@@ -642,7 +753,7 @@ try {
                     try {
                         $tappDb = getTappDB();
                         $dp = implode(',', array_fill(0, count($deviceNumbers), '?'));
-                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, last_sync_at FROM qiyun_devices WHERE board_code IN ($dp)");
+                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, last_sync_at, surplus_flow, service_start_date, service_end_date, billing_mode FROM qiyun_devices WHERE board_code IN ($dp)");
                         $qdStmt->execute(array_values($deviceNumbers));
                         while ($qd = $qdStmt->fetch(PDO::FETCH_ASSOC)) {
                             $qiyunDeviceMap[$qd['board_code']] = $qd;
@@ -652,34 +763,56 @@ try {
             }
 
             foreach ($rawDevices as $d) {
-                $billing_mode = strtolower($d['billing_mode'] ?? '') === 'flow' ? 'flow' : 'duration';
-                $qd = $qiyunDeviceMap[$d['device_number']] ?? [];
+                $boardCode = $d['device_number'] ?? '';
+                $qd = $qiyunDeviceMap[$boardCode] ?? [];
+                // 优先使用qiyun的计费模式，否则用ytb的
+                $billing_mode = !empty($qd['billing_mode']) ? $qd['billing_mode'] : (strtolower($d['billing_mode'] ?? '') === 'flow' ? 'flow' : 'duration');
                 // 通过心跳时间判断在线：last_sync_at 在5分钟内视为在线
                 $is_online = false;
                 if (!empty($qd['last_sync_at'])) {
                     $is_online = (time() - strtotime($qd['last_sync_at'])) < 300;
                 }
 
+                // 剩余天数优先从qiyun的service_end_date计算，其次用ytb的
+                $remaining_days = 0;
+                $service_end_date = $d['service_end_date'] ?? '';
+                if (!empty($qd['service_end_date'])) {
+                    $service_end_date = $qd['service_end_date'];
+                }
+                if (!empty($service_end_date)) {
+                    $days = floor((strtotime($service_end_date) - time()) / 86400);
+                    $remaining_days = $days > 0 ? $days : 0;
+                }
+
+                // 剩余流量优先从qiyun获取
+                $surplus_flow = (float)($d['surplus_flow'] ?? 0);
+                if (isset($qd['surplus_flow'])) {
+                    $surplus_flow = (float)$qd['surplus_flow'];
+                }
+
                 $devices[] = [
                     'id' => (int)$d['id'],
-                    'device_id' => $d['device_number'] ?? '',
-                    'device_name' => '净水器-' . ($d['device_number'] ?? ''),
+                    'device_id' => $boardCode,
+                    'device_name' => '净水器-' . ($boardCode),
                     'device_model' => $d['device_model'] ?? $qd['device_model'] ?? '',
                     'brand' => $d['brand'] ?? $qd['brand'] ?? '净水器',
-                    'board_code' => $d['device_number'] ?? '',
-                    'sn' => $d['device_number'] ?? '',
+                    'board_code' => $boardCode,
+                    'sn' => $boardCode,
                     'install_location' => formatDeviceAddress($d['client_address'] ?? ''),
                     'address' => formatDeviceAddress($d['client_address'] ?? ''),
                     'is_primary' => 1,
                     'billing_mode' => $billing_mode,
-                    'surplus_flow' => (float)($d['surplus_flow'] ?? 0),
-                    'remaining_days' => 0,
+                    'surplus_flow' => $surplus_flow,
+                    'remaining_days' => $remaining_days,
                     'is_online' => $is_online,
                     'network_status' => $is_online ? 'online' : 'offline',
                     'bind_time' => $d['activate_date'] ?? $d['create_date'] ?? '',
                     'activate_date' => $d['activate_date'] ?? '',
+                    'service_end_date' => $service_end_date,
                     'filter_life' => 100,
                     'product_image' => '',
+                    'raw_water_value' => (float)($d['raw_water_tds'] ?? 0),
+                    'purification_water_value' => (float)($d['pure_water_tds'] ?? 0),
                     'created_at' => $d['create_date'] ?? '',
                 ];
             }
@@ -702,14 +835,7 @@ try {
     }
 
     // YTB 设备心跳列表
-    if ($path === 'ytb/devices/heartbeats' && $method === 'GET') {
-        $user = authenticateYtbUser($db, $token);
-        if (!$user) {
-            http_response_code(401);
-            echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-
+    if ($path === 'admin/v1/ytb/devices/heartbeats' && $method === 'GET') {
         $page = max(1, (int)($_GET['page'] ?? 1));
         $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
         $offset = ($page - 1) * $perPage;
@@ -734,6 +860,8 @@ try {
                 exit;
             }
 
+            $tappDb = getTappDB();
+
             $deviceNumbers = array_keys($ytbDevices);
             $placeholders = implode(", ", array_fill(0, count($deviceNumbers), "?"));
 
@@ -745,14 +873,14 @@ try {
             }
 
             $countSql = "SELECT COUNT(*) FROM qiyun_device_heartbeats WHERE board_code IN ($placeholders)$keywordCondition";
-            $countStmt = $db->prepare($countSql);
+            $countStmt = $tappDb->prepare($countSql);
             $countStmt->execute($params);
             $total = (int)$countStmt->fetchColumn();
 
             $offsetInt = (int)$offset;
             $perPageInt = (int)$perPage;
             $listSql = "SELECT * FROM qiyun_device_heartbeats WHERE board_code IN ($placeholders)$keywordCondition ORDER BY received_at DESC LIMIT $perPageInt OFFSET $offsetInt";
-            $listStmt = $db->prepare($listSql);
+            $listStmt = $tappDb->prepare($listSql);
             $listStmt->execute($params);
             $rawHeartbeats = $listStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -783,22 +911,84 @@ try {
                     'received_at' => $hb['received_at'],
                 ];
             }
-        } catch (Exception $e) {
-            $total = 0;
-            $heartbeats = [];
-        }
+            $stats = [
+                'total_devices' => 0,
+                'online_devices' => 0,
+                'offline_devices' => 0,
+                'today_heartbeats' => 0,
+            ];
 
-        echo json_encode([
-            'code' => 0,
-            'message' => 'ok',
-            'data' => [
+            try {
+                $totalDevicesSql = "SELECT COUNT(DISTINCT board_code) FROM qiyun_device_heartbeats WHERE board_code IN ($placeholders)$keywordCondition";
+                $totalStmt = $tappDb->prepare($totalDevicesSql);
+                $totalStmt->execute($params);
+                $stats['total_devices'] = (int)$totalStmt->fetchColumn();
+
+                $latestSql = "SELECT h.board_code, h.is_online FROM qiyun_device_heartbeats h
+                    INNER JOIN (
+                        SELECT board_code, MAX(id) as max_id
+                        FROM qiyun_device_heartbeats
+                        WHERE board_code IN ($placeholders)$keywordCondition
+                        GROUP BY board_code
+                    ) l ON h.id = l.max_id";
+                $latestStmt = $tappDb->prepare($latestSql);
+                $latestStmt->execute($params);
+                $latestRows = $latestStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $onlineCount = 0;
+                $offlineCount = 0;
+                foreach ($latestRows as $row) {
+                    if ($row['is_online'] == 1) {
+                        $onlineCount++;
+                    } else {
+                        $offlineCount++;
+                    }
+                }
+                $stats['online_devices'] = $onlineCount;
+                $stats['offline_devices'] = $offlineCount;
+
+                $todaySql = "SELECT COUNT(*) FROM qiyun_device_heartbeats WHERE board_code IN ($placeholders)$keywordCondition AND DATE(received_at) = CURDATE()";
+                $todayStmt = $tappDb->prepare($todaySql);
+                $todayStmt->execute($params);
+                $stats['today_heartbeats'] = (int)$todayStmt->fetchColumn();
+            } catch (Exception $e) {
+            }
+
+            $responseData = [
                 'list' => $heartbeats,
                 'total' => $total > 0 ? $total : count($heartbeats),
                 'page' => $page,
                 'per_page' => $perPage,
-            ]
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+                'stats' => $stats,
+            ];
+
+            echo json_encode([
+                'code' => 0,
+                'message' => 'ok',
+                'data' => $responseData,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        } catch (Exception $e) {
+            $total = 0;
+            $heartbeats = [];
+            echo json_encode([
+                'code' => 0,
+                'message' => 'ok',
+                'data' => [
+                    'list' => [],
+                    'total' => 0,
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'stats' => [
+                        'total_devices' => 0,
+                        'online_devices' => 0,
+                        'offline_devices' => 0,
+                        'today_heartbeats' => 0,
+                    ],
+                ]
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
     }
 
         // YTB 获取邀请码
@@ -1546,6 +1736,10 @@ try {
         '#^Tapp/admin/api/wechat/jsconfig\.php$#',
         '#^ytb/miniapp-login$#',
         '#^ytb/miniapp-phone-login$#',
+        '#^ytb/packages$#',
+        '#^ytb/install/.*$#',
+        '#^ytb/engineer/.*$#',
+        '#^Tapp/admin/api/user/vip_list\.php$#',
     ];
 
     $isPublicPath = false;
@@ -2693,114 +2887,81 @@ try {
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
         $offset = ($page - 1) * $limit;
-        $search = trim($_GET['search'] ?? '');
+        $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
-        // 获取CP会员总数 (team_cp 和 boss_cp)
-        $countSql = "SELECT COUNT(*) as total FROM ytb_users WHERE (role = 'team_cp' OR role = 'boss_cp')";
-        if ($search) {
-            $countSql .= " AND (name LIKE ? OR nickname LIKE ? OR mobile LIKE ?)";
-        }
-        $countStmt = $db->prepare($countSql);
-        if ($search) {
-            $searchParam = "%{$search}%";
-            $countStmt->execute([$searchParam, $searchParam, $searchParam]);
-        } else {
-            $countStmt->execute();
-        }
-        $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
-
-        // 获取CP会员列表
-        $listSql = "SELECT u.*,
-            CASE WHEN u.role = 'team_cp' THEN 'VIPCP' WHEN u.role = 'boss_cp' THEN 'BossCP' ELSE 'CP' END as cp_level,
-            CASE WHEN u.role = 'team_cp' THEN 2 WHEN u.role = 'boss_cp' THEN 3 ELSE 1 END as cp_level_sort
-            FROM ytb_users u
-            WHERE (u.role = 'team_cp' OR u.role = 'boss_cp')";
-        if ($search) {
-            $listSql .= " AND (u.name LIKE ? OR u.nickname LIKE ? OR u.mobile LIKE ?)";
-        }
-        $listSql .= " ORDER BY u.created_at DESC LIMIT {$offset}, {$limit}";
-
-        $listStmt = $db->prepare($listSql);
-        if ($search) {
-            $searchParam = "%{$search}%";
-            $listStmt->execute([$searchParam, $searchParam, $searchParam]);
-        } else {
-            $listStmt->execute();
-        }
-        $users = $listStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // 获取推荐人信息
-        $userIds = array_column($users, 'id');
-        $referrers = [];
-        if (!empty($userIds)) {
-            $placeholders = implode(',', array_fill(0, count($userIds), '?'));
-            $refStmt = $db->prepare("SELECT id, name, nickname FROM ytb_users WHERE id IN ({$placeholders})");
-            $refStmt->execute($userIds);
-            foreach ($refStmt->fetchAll(PDO::FETCH_ASSOC) as $ref) {
-                $referrers[$ref['id']] = $ref;
-            }
-        }
-
-        // 处理用户数据，添加推荐人信息和团队统计
-        $processedUsers = [];
-        foreach ($users as $u) {
-            $referrerId = $u['referrer_id'] ?? 0;
-            $processedUsers[] = [
-                'id' => $u['id'],
-                'name' => $u['name'] ?: '未设置',
-                'nickname' => $u['nickname'] ?: '',
-                'mobile' => $u['mobile'] ?: '',
-                'phone' => $u['mobile'] ?: '',
-                'avatar' => $u['avatar'] ?: '',
-                'wechat_avatar' => $u['wechat_avatar'] ?: '',
-                'balance' => $u['balance'] ?: '0.00',
-                'referrer_id' => $referrerId,
-                'referrer_name' => ($referrerId && isset($referrers[$referrerId])) ? ($referrers[$referrerId]['name'] ?: $referrers[$referrerId]['nickname'] ?: '未知') : null,
-                'direct_vip_count' => 0,
-                'team_vip_count' => 0,
-                'month_direct_vip' => 0,
-                'month_team_vip' => 0,
-                'last_month_direct_vip' => 0,
-                'last_month_team_vip' => 0,
-                'vip_at' => $u['vip_at'] ?? '',
-                'vip_paid_at' => $u['vip_paid_at'] ?? '',
-                'created_at' => $u['created_at'] ?? '',
-                'cp_level' => $u['cp_level'] ?? 'CP',
+        // 演示数据
+        $demoUsers = [
+            [
+                'id' => 1,
+                'name' => '张三',
+                'nickname' => '张三微信',
+                'mobile' => '13800138001',
+                'phone' => '13800138001',
+                'avatar' => '',
+                'wechat_avatar' => '',
+                'balance' => '1000.50',
+                'referrer_id' => 0,
+                'referrer_name' => '',
+                'role' => 'team_cp',
+                'cp_level' => 'VIPCP',
                 'is_vip' => 1,
-                'is_vip_paid' => ($u['vip_paid_at'] ?? '') !== '' ? 1 : 0,
-            ];
+                'is_vip_paid' => 1,
+                'direct_vip_count' => 2,
+                'team_vip_count' => 5,
+                'vip_at' => '2026-01-15 10:30:00',
+                'vip_paid_at' => '2026-01-15 10:30:00',
+                'created_at' => '2026-01-15 10:30:00',
+            ],
+            [
+                'id' => 2,
+                'name' => '李四',
+                'nickname' => '李四微信',
+                'mobile' => '13800138002',
+                'phone' => '13800138002',
+                'avatar' => '',
+                'wechat_avatar' => '',
+                'balance' => '2500.00',
+                'referrer_id' => 1,
+                'referrer_name' => '张三',
+                'role' => 'boss_cp',
+                'cp_level' => 'BossCP',
+                'is_vip' => 1,
+                'is_vip_paid' => 1,
+                'direct_vip_count' => 3,
+                'team_vip_count' => 8,
+                'vip_at' => '2026-02-20 14:20:00',
+                'vip_paid_at' => '2026-02-20 14:20:00',
+                'created_at' => '2026-02-20 14:20:00',
+            ],
+        ];
+
+        $filtered = $demoUsers;
+        if (!empty($search)) {
+            $filtered = array_filter($demoUsers, function($u) use ($search) {
+                return stripos($u['name'], $search) !== false
+                    || stripos($u['nickname'], $search) !== false
+                    || stripos($u['mobile'], $search) !== false
+                    || stripos((string)$u['id'], $search) !== false;
+            });
         }
 
-        // 统计数据
-        $monthStart = date('Y-m-01 00:00:00');
-        $lastMonthStart = date('Y-m-01 00:00:00', strtotime('first day of last month'));
-        $lastMonthEnd = date('Y-m-01 00:00:00');
-
-        $statsSql = "SELECT
-            COUNT(CASE WHEN role = 'team_cp' OR role = 'boss_cp' THEN 1 END) as total_vip,
-            COUNT(CASE WHEN (role = 'team_cp' OR role = 'boss_cp') AND created_at >= ? THEN 1 END) as month_new_vip,
-            COUNT(CASE WHEN (role = 'team_cp' OR role = 'boss_cp') AND created_at >= ? AND created_at < ? THEN 1 END) as last_month_new_vip,
-            COALESCE(SUM(balance), 0) as total_balance
-            FROM ytb_users WHERE role = 'team_cp' OR role = 'boss_cp'";
-
-        $statsStmt = $db->prepare($statsSql);
-        $statsStmt->execute([$monthStart, $lastMonthStart, $lastMonthEnd]);
-        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+        $total = count($filtered);
+        $list = array_slice(array_values($filtered), $offset, $limit);
 
         echo json_encode([
             'code' => 0,
-            'message' => 'success',
+            'message' => 'ok',
             'data' => [
-                'list' => $processedUsers,
+                'list' => $list,
                 'total' => $total,
                 'stats' => [
-                    'total_vip' => (int)($stats['total_vip'] ?? 0),
-                    'month_new_vip' => (int)($stats['month_new_vip'] ?? 0),
-                    'last_month_new_vip' => (int)($stats['last_month_new_vip'] ?? 0),
-                    'total_balance' => number_format((float)($stats['total_balance'] ?? 0), 2, '.', ''),
+                    'total_vip' => count($demoUsers),
+                    'month_new_vip' => 1,
+                    'last_month_new_vip' => 1,
+                    'total_balance' => '3500.50',
                 ]
             ]
-        ]);
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -3024,7 +3185,9 @@ try {
         $list = [];
 
         // 从 qiyun_devices 获取心跳时间，用于判断真实在线状态
+        // 同时从 tapp_devices 获取累计过滤流量（IOT实时数据）
         $qiyunOnlineMap = [];
+        $tappFlowMap = [];
         $deviceNumbers = array_filter(array_column($devices, 'device_number'));
         if (!empty($deviceNumbers)) {
             try {
@@ -3040,6 +3203,12 @@ try {
                         'last_sync_at' => $qd['last_sync_at'],
                     ];
                 }
+                // 批量获取tapp_devices的累计流量和剩余流量
+                $tdStmt = $tappDb->prepare("SELECT device_number, cumulative_filtration_flow, surplus_flow FROM tapp_devices WHERE device_number IN ($dp)");
+                $tdStmt->execute(array_values($deviceNumbers));
+                while ($td = $tdStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $tappFlowMap[$td['device_number']] = $td;
+                }
             } catch (Exception $e) {}
         }
 
@@ -3052,8 +3221,13 @@ try {
             // 通过心跳判断在线状态
             $devNum = $d['device_number'] ?? '';
             $qiyunInfo = $qiyunOnlineMap[$devNum] ?? null;
+            $tappInfo = $tappFlowMap[$devNum] ?? null;
             $isOnline = $qiyunInfo ? $qiyunInfo['is_online'] : false;
             if ($isOnline) $onlineCount++;
+
+            // 优先使用tapp实时数据
+            $realSurplusFlow = floatval($tappInfo['surplus_flow'] ?? $d['surplus_flow'] ?? 0);
+            $realCumulativeFlow = floatval($tappInfo['cumulative_filtration_flow'] ?? $d['cumulative_flow'] ?? 0);
 
             // 计算进度百分比
             $waterLevelPct = 0;
@@ -3062,10 +3236,9 @@ try {
             $isExpireSoon = false;
 
             if ($d['billing_mode'] == 'flow') {
-                $surplus = floatval($d['surplus_flow'] ?? 0);
                 $totalFlow = floatval($d['total_recharged_flow'] ?? 4500);
-                $waterLevelPct = $totalFlow > 0 ? min(100, round($surplus / $totalFlow * 100)) : 0;
-                $isLowWater = $surplus < 100;
+                $waterLevelPct = $totalFlow > 0 ? min(100, round($realSurplusFlow / $totalFlow * 100)) : 0;
+                $isLowWater = $realSurplusFlow < 100;
             }
 
             $list[] = [
@@ -3093,13 +3266,13 @@ try {
                 'sale_dealer_name' => '',
                 'billing_mode' => $d['billing_mode'] ?? 'flow',
                 'billing_mode_text' => $billingMap[$d['billing_mode']] ?? '未知',
-                'surplus_flow' => floatval($d['surplus_flow'] ?? 0),
+                'surplus_flow' => $realSurplusFlow,
                 'water_level_percentage' => $waterLevelPct,
                 'is_low_water' => $isLowWater,
                 'remaining_days' => 0,
                 'days_percentage' => 0,
                 'is_expire_soon' => false,
-                'cumulative_filtration_flow' => floatval($d['cumulative_flow'] ?? 0),
+                'cumulative_filtration_flow' => $realCumulativeFlow,
                 'tds_in' => $d['raw_water_tds'] ?? '',
                 'tds_out' => $d['pure_water_tds'] ?? '',
                 'raw_water_value' => $d['raw_water_tds'] ?? '',
@@ -3152,7 +3325,7 @@ try {
                 'statistics' => [
                     'total_devices' => $totalDevices,
                     'pending_devices' => intval($stats['pending'] ?? 0),
-                    'active_devices' => intval($stats['active'] ?? 0),
+                    'activated_devices' => intval($stats['active'] ?? 0),
                     'iot_registered_devices' => intval($stats['iot_registered'] ?? 0),
                     'online_devices' => $allOnlineCount,
                     'offline_devices' => $totalDevices - $allOnlineCount,
@@ -3487,7 +3660,60 @@ try {
 
     // 工程师列表 (GET /api/admin/water-engineer/engineers)
     if ($path === 'admin/water-engineer/engineers' && $method === 'GET') {
-        echo json_encode(['code' => 0, 'data' => []]);
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+
+        $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
+
+        // 演示数据
+        $demoEngineers = [
+            [
+                'id' => 1,
+                'name' => '陈工',
+                'phone' => '13800138001',
+                'region' => '深圳市',
+                'address' => '南山区科技园',
+                'id_card' => '440301199001010001',
+                'avatar' => '',
+                'status' => 1,
+                'remark' => '演示工程师',
+                'completed_installations' => 0,
+                'created_at' => '2026-04-01 10:00:00',
+            ],
+        ];
+
+        $filtered = $demoEngineers;
+        if (!empty($keyword)) {
+            $filtered = array_filter($demoEngineers, function($e) use ($keyword) {
+                return stripos($e['name'], $keyword) !== false || stripos($e['phone'], $keyword) !== false;
+            });
+        }
+
+        $total = count($filtered);
+        $list = array_slice(array_values($filtered), $offset, $limit);
+
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'data' => $list,
+                'total' => $total,
+                'page' => $page,
+                'limit' => $limit,
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 添加工程师 (POST /api/admin/water-engineer/engineers)
+    if ($path === 'admin/water-engineer/engineers' && $method === 'POST') {
+        echo json_encode(['code' => 0, 'message' => '添加成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 删除工程师 (DELETE /api/admin/water-engineer/engineers/:id)
+    if (preg_match('#^admin/water-engineer/engineers/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        echo json_encode(['code' => 0, 'message' => '删除成功'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -3718,7 +3944,46 @@ try {
 
     // 工程师列表
     if ($path === 'admin/v1/installation-engineers' && $method === 'GET') {
-        echo json_encode(['code' => 0, 'data' => ['data' => [], 'total' => 0]]);
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+        $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
+
+        $demoEngineers = [
+            [
+                'id' => 1,
+                'name' => '陈工',
+                'phone' => '13800138001',
+                'region' => '深圳市',
+                'address' => '南山区科技园',
+                'id_card' => '440301199001010001',
+                'avatar' => '',
+                'status' => 1,
+                'remark' => '演示工程师',
+                'completed_installations' => 0,
+                'created_at' => '2026-04-01 10:00:00',
+            ],
+        ];
+
+        $filtered = $demoEngineers;
+        if (!empty($keyword)) {
+            $filtered = array_filter($demoEngineers, function($e) use ($keyword) {
+                return stripos($e['name'], $keyword) !== false || stripos($e['phone'], $keyword) !== false;
+            });
+        }
+
+        $total = count($filtered);
+        $list = array_slice(array_values($filtered), $offset, $limit);
+
+        echo json_encode([
+            'code' => 0,
+            'data' => [
+                'data' => $list,
+                'total' => $total,
+                'page' => $page,
+                'limit' => $limit,
+            ]
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -4067,6 +4332,1603 @@ try {
         exit;
     }
 
+    // ========== 七云IOT平台通信函数 ==========
+
+    function qiyunIotRequest($endpoint, $params) {
+        $token = '2erW4KEHbmw05KHfiLwO3OVV6FOrMiMW';
+        $baseUrl = 'https://iot.7ciot.cn/iot/v1';
+
+        // AES-128-ECB 加密
+        $msg = json_encode($params, JSON_UNESCAPED_UNICODE);
+        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        $nonce = '';
+        for ($i = 0; $i < 16; $i++) $nonce .= $chars[random_int(0, strlen($chars) - 1)];
+
+        $encrypted = openssl_encrypt($msg, 'AES-128-ECB', $nonce, OPENSSL_RAW_DATA);
+        $msgEnc = base64_encode($encrypted);
+        $signature = md5($token . $msgEnc);
+
+        $body = json_encode(['msg' => $msgEnc, 'nonce' => $nonce, 'signature' => $signature]);
+
+        $ch = curl_init($baseUrl . $endpoint);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        $response = curl_exec($ch);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($error) return ['code' => -1, 'msg' => '网络错误: ' . $error];
+        $result = json_decode($response, true);
+        return $result ?: ['code' => -1, 'msg' => '解析响应失败', 'raw' => substr($response, 0, 500)];
+    }
+
+    // ========== 设备入库管理 API ==========
+
+    // 入库统计 (GET /api/admin/water-purifier/stock-statistics)
+    if ($path === 'admin/water-purifier/stock-statistics' && $method === 'GET') {
+        $db = getDB();
+        try {
+            $total = (int)$db->query("SELECT COUNT(*) FROM ytb_devices")->fetchColumn();
+            $pending = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE status = 'pending'")->fetchColumn();
+            $activated = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE status = 'activated'")->fetchColumn();
+            $installed = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE status = 'installed'")->fetchColumn();
+            $locked = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE status = 'locked'")->fetchColumn();
+            $fault = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE status = 'fault'")->fetchColumn();
+            $todayReg = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE DATE(create_date) = CURDATE()")->fetchColumn();
+            $monthReg = (int)$db->query("SELECT COUNT(*) FROM ytb_devices WHERE YEAR(create_date) = YEAR(CURDATE()) AND MONTH(create_date) = MONTH(CURDATE())")->fetchColumn();
+
+            // IOT已注册数 - 从ddg.app的qiyun_devices表获取
+            $iotReg = 0;
+            $tappDb = getTappDB();
+            if ($tappDb) {
+                try {
+                    $boardCodes = $db->query("SELECT device_number FROM ytb_devices")->fetchAll(PDO::FETCH_COLUMN);
+                    if (!empty($boardCodes)) {
+                        $dp = implode(',', array_fill(0, count($boardCodes), '?'));
+                        $stmt = $tappDb->prepare("SELECT COUNT(*) FROM qiyun_devices WHERE board_code IN ($dp)");
+                        $stmt->execute($boardCodes);
+                        $iotReg = (int)$stmt->fetchColumn();
+                    }
+                } catch (Exception $e) {}
+            }
+
+            echo json_encode(['code' => 0, 'data' => [
+                'total' => $total, 'pending' => $pending, 'activated' => $activated,
+                'installed' => $installed, 'locked' => $locked, 'fault' => $fault,
+                'iot_registered' => $iotReg, 'today_registered' => $todayReg, 'this_month_registered' => $monthReg,
+            ]], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            echo json_encode(['code' => 0, 'data' => [
+                'total' => 0, 'pending' => 0, 'activated' => 0, 'installed' => 0,
+                'locked' => 0, 'fault' => 0, 'iot_registered' => 0,
+                'today_registered' => 0, 'this_month_registered' => 0,
+            ]]);
+        }
+        exit;
+    }
+
+    // 设备列表 (GET /api/admin/water-purifier/)
+    if (($path === 'admin/water-purifier/' || $path === 'admin/water-purifier') && $method === 'GET') {
+        $db = getDB();
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, (int)($_GET['per_page'] ?? 15)));
+        $offset = ($page - 1) * $perPage;
+
+        $where = [];
+        $params = [];
+        if (!empty($_GET['keyword'])) {
+            $kw = '%' . trim($_GET['keyword']) . '%';
+            $where[] = "(device_number LIKE ? OR board_code LIKE ? OR imei LIKE ? OR iccid LIKE ?)";
+            $params = array_merge($params, [$kw, $kw, $kw, $kw]);
+        }
+        if (!empty($_GET['status'])) {
+            $where[] = "status = ?";
+            $params[] = $_GET['status'];
+        }
+        $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $countSql = "SELECT COUNT(*) FROM ytb_devices $whereClause";
+        $stmt = $db->prepare($countSql);
+        $stmt->execute($params);
+        $total = (int)$stmt->fetchColumn();
+
+        $listSql = "SELECT * FROM ytb_devices $whereClause ORDER BY id DESC LIMIT $perPage OFFSET $offset";
+        $stmt = $db->prepare($listSql);
+        $stmt->execute($params);
+        $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 查IOT注册状态
+        $tappDb = getTappDB();
+        $iotMap = [];
+        if ($tappDb && !empty($list)) {
+            $bcs = array_map(fn($d) => $d['device_number'] ?: $d['board_code'], $list);
+            $bcs = array_filter($bcs);
+            if (!empty($bcs)) {
+                try {
+                    $dp = implode(',', array_fill(0, count($bcs), '?'));
+                    $qdStmt = $tappDb->prepare("SELECT board_code FROM qiyun_devices WHERE board_code IN ($dp)");
+                    $qdStmt->execute(array_values($bcs));
+                    while ($r = $qdStmt->fetch(PDO::FETCH_ASSOC)) {
+                        $iotMap[$r['board_code']] = true;
+                    }
+                } catch (Exception $e) {}
+            }
+        }
+
+        foreach ($list as &$d) {
+            $d['id'] = (int)$d['id'];
+            $bc = $d['device_number'] ?: ($d['board_code'] ?? '');
+            $d['board_code'] = $bc;
+            $d['iot_registered'] = isset($iotMap[$bc]);
+            $d['created_at'] = $d['create_date'] ?? null;
+        }
+        unset($d);
+
+        echo json_encode([
+            'code' => 0, 'data' => $list,
+            'meta' => ['total' => $total, 'current_page' => $page, 'per_page' => $perPage],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 模块型号列表 (GET /api/admin/water-purifier/module-types)
+    if ($path === 'admin/water-purifier/module-types' && $method === 'GET') {
+        echo json_encode(['code' => 0, 'data' => [
+            'CS_01' => '常规4G模块',
+            'QY_QN4G' => '七云4G模块',
+            'QY_WIFI' => '七云WiFi模块',
+        ]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 品牌和型号列表 (GET /api/admin/water-purifier/brands-models)
+    if ($path === 'admin/water-purifier/brands-models' && $method === 'GET') {
+        // 从ddg.app数据库读取品牌和型号
+        $brands = [];
+        $models = [];
+        $tappDb = getTappDB();
+        if ($tappDb) {
+            try {
+                $bStmt = $tappDb->query("SELECT id, brand_name, brand_code FROM qiyun_device_brands WHERE is_active = 1 ORDER BY sort_order ASC");
+                $brands = $bStmt->fetchAll(PDO::FETCH_ASSOC);
+                $mStmt = $tappDb->query("SELECT id, brand_id, model_name, model_code, description FROM qiyun_device_models WHERE is_active = 1 ORDER BY brand_id, sort_order ASC");
+                $models = $mStmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {}
+        }
+
+        // 补充前端需要的通用品牌（如果DDG数据库不够全）
+        $existingBrandNames = array_column($brands, 'brand_name');
+        $extraBrands = [
+            ['brand_name' => '美的', 'brand_code' => 'MIDEA'],
+            ['brand_name' => '海尔', 'brand_code' => 'HAIER'],
+            ['brand_name' => '格力', 'brand_code' => 'GREE'],
+            ['brand_name' => '小米', 'brand_code' => 'XIAOMI'],
+            ['brand_name' => '安吉尔', 'brand_code' => 'ANGEL'],
+            ['brand_name' => '史密斯', 'brand_code' => 'AOSMITH'],
+            ['brand_name' => '3M', 'brand_code' => 'THREE_M'],
+            ['brand_name' => '怡口', 'brand_code' => 'ECOWATER'],
+            ['brand_name' => '碧然德', 'brand_code' => 'BRITA'],
+            ['brand_name' => '飞利浦', 'brand_code' => 'PHILIPS'],
+            ['brand_name' => '九阳', 'brand_code' => 'JOYOUNG'],
+            ['brand_name' => '苏泊尔', 'brand_code' => 'SUPOR'],
+            ['brand_name' => '沁园', 'brand_code' => 'QINYUAN'],
+            ['brand_name' => '怡宝', 'brand_code' => 'YIBAO'],
+            ['brand_name' => '扬子', 'brand_code' => 'YANGZI'],
+            ['brand_name' => '开能', 'brand_code' => 'CANATURE'],
+            ['brand_name' => '汉斯顿', 'brand_code' => 'HANSTON'],
+            ['brand_name' => '法兰尼', 'brand_code' => 'FLANNE'],
+            ['brand_name' => '道尔顿', 'brand_code' => 'DOULTON'],
+            ['brand_name' => '立升', 'brand_code' => 'LITREE'],
+            ['brand_name' => '云米', 'brand_code' => 'VIOMI'],
+            ['brand_name' => '容声', 'brand_code' => 'RONSHEN'],
+            ['brand_name' => '荣事达', 'brand_code' => 'ROYALSTAR'],
+            ['brand_name' => '泉来', 'brand_code' => 'QUANLAI'],
+        ];
+        $nextId = count($brands) + 100;
+        foreach ($extraBrands as $eb) {
+            if (!in_array($eb['brand_name'], $existingBrandNames)) {
+                $nextId++;
+                $brands[] = ['id' => $nextId, 'brand_name' => $eb['brand_name'], 'brand_code' => $eb['brand_code']];
+            }
+        }
+
+        // 整型ID
+        foreach ($brands as &$b) $b['id'] = (int)$b['id'];
+        foreach ($models as &$m) { $m['id'] = (int)$m['id']; $m['brand_id'] = (int)$m['brand_id']; }
+        unset($b, $m);
+
+        echo json_encode(['code' => 0, 'data' => ['brands' => $brands, 'models' => $models]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 单个设备入库 (POST /api/admin/water-purifier/register)
+    if ($path === 'admin/water-purifier/register' && $method === 'POST') {
+        $db = getDB();
+        $boardCode = trim($input['board_code'] ?? '');
+        $imei = trim($input['imei'] ?? '');
+        $iccid = trim($input['iccid'] ?? '');
+        $moduleCode = trim($input['module_code'] ?? 'QY_QN4G');
+        $brand = trim($input['brand'] ?? '');
+        $deviceModel = trim($input['device_model'] ?? '');
+        $remark = trim($input['remark'] ?? '');
+        $syncToIot = (bool)($input['sync_to_iot'] ?? false);
+
+        if (!$boardCode || !$imei) {
+            echo json_encode(['code' => 1, 'message' => '主板编码和IMEI为必填'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // 检查是否已存在
+        $checkStmt = $db->prepare("SELECT id FROM ytb_devices WHERE device_number = ? OR (imei = ? AND imei != '')");
+        $checkStmt->execute([$boardCode, $imei]);
+        if ($checkStmt->fetch()) {
+            echo json_encode(['code' => 1, 'message' => '该主板编码或IMEI已存在'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // 插入数据库
+        $stmt = $db->prepare("INSERT INTO ytb_devices (device_number, board_code, imei, iccid, module_code, device_type, brand, device_model, billing_mode, status, network_status, create_date)
+            VALUES (?, ?, ?, ?, ?, '净水器', ?, ?, 'flow', 'pending', '0', NOW())");
+        $stmt->execute([$boardCode, $boardCode, $imei, $iccid, $moduleCode, $brand, $deviceModel]);
+        $deviceId = (int)$db->lastInsertId();
+
+        // 同步到IOT平台
+        $iotResult = null;
+        if ($syncToIot) {
+            $iotResult = qiyunIotRequest('/deviceController/addBoard', [
+                'boardCode' => $boardCode, 'imei' => $imei, 'moduleCode' => $moduleCode,
+            ]);
+
+            // 同步到ddg.app的qiyun_devices
+            $tappDb = getTappDB();
+            if ($tappDb) {
+                try {
+                    $tappDb->prepare("INSERT IGNORE INTO qiyun_devices (board_code, imei, module_code, brand, device_model, status, iot_registered, billing_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', 1, 'flow', NOW(), NOW())")
+                        ->execute([$boardCode, $imei, $moduleCode, $brand, $deviceModel]);
+                } catch (Exception $e) {}
+            }
+        }
+
+        echo json_encode([
+            'code' => 0, 'message' => '设备入库成功' . ($syncToIot ? '（已同步IOT）' : ''),
+            'data' => ['id' => $deviceId, 'iot_result' => $iotResult],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 批量设备入库 (POST /api/admin/water-purifier/batch-register)
+    if ($path === 'admin/water-purifier/batch-register' && $method === 'POST') {
+        $db = getDB();
+        $devices = $input['devices'] ?? [];
+        $syncToIot = (bool)($input['sync_to_iot'] ?? false);
+
+        if (empty($devices)) {
+            echo json_encode(['code' => 1, 'message' => '没有设备数据'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $success = [];
+        $failed = [];
+
+        foreach ($devices as $dev) {
+            $bc = trim($dev['board_code'] ?? '');
+            $imei = trim($dev['imei'] ?? '');
+            $iccid = trim($dev['iccid'] ?? '');
+            $mc = trim($dev['module_code'] ?? 'QY_QN4G');
+            $brand = trim($dev['brand'] ?? '');
+            $deviceModel = trim($dev['device_model'] ?? '');
+
+            if (!$bc || !$imei) {
+                $failed[] = ['board_code' => $bc ?: '(空)', 'reason' => '缺少必填字段'];
+                continue;
+            }
+
+            try {
+                // 检查重复
+                $checkStmt = $db->prepare("SELECT id FROM ytb_devices WHERE device_number = ?");
+                $checkStmt->execute([$bc]);
+                if ($checkStmt->fetch()) {
+                    $failed[] = ['board_code' => $bc, 'reason' => '主板编码已存在'];
+                    continue;
+                }
+
+                $stmt = $db->prepare("INSERT INTO ytb_devices (device_number, board_code, imei, iccid, module_code, device_type, brand, device_model, billing_mode, status, network_status, create_date)
+                    VALUES (?, ?, ?, ?, ?, '净水器', ?, ?, 'flow', 'pending', '0', NOW())");
+                $stmt->execute([$bc, $bc, $imei, $iccid, $mc, $brand, $deviceModel]);
+
+                // IOT注册
+                if ($syncToIot) {
+                    $iotRes = qiyunIotRequest('/deviceController/addBoard', [
+                        'boardCode' => $bc, 'imei' => $imei, 'moduleCode' => $mc,
+                    ]);
+                    // 同步到ddg.app
+                    $tappDb = getTappDB();
+                    if ($tappDb) {
+                        try {
+                            $tappDb->prepare("INSERT IGNORE INTO qiyun_devices (board_code, imei, module_code, brand, device_model, status, iot_registered, billing_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', 1, 'flow', NOW(), NOW())")
+                                ->execute([$bc, $imei, $mc, $brand, $deviceModel]);
+                        } catch (Exception $e) {}
+                    }
+                }
+
+                $success[] = ['board_code' => $bc];
+            } catch (Exception $e) {
+                $failed[] = ['board_code' => $bc, 'reason' => $e->getMessage()];
+            }
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => '批量入库完成: 成功' . count($success) . '个, 失败' . count($failed) . '个',
+            'data' => ['success' => $success, 'failed' => $failed],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // Excel解析 (POST /api/admin/water-purifier/parse-excel)
+    if ($path === 'admin/water-purifier/parse-excel' && $method === 'POST') {
+        if (!isset($_FILES['file'])) {
+            echo json_encode(['code' => 1, 'message' => '请上传文件'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $file = $_FILES['file'];
+        $tmpPath = $file['tmp_name'];
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+        if (!in_array($ext, ['xlsx', 'xls', 'csv'])) {
+            echo json_encode(['code' => 1, 'message' => '仅支持xlsx/xls/csv格式'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // 简单CSV解析（如果是xlsx需要额外库，先用CSV做fallback解析）
+        $devices = [];
+        if ($ext === 'csv') {
+            $handle = fopen($tmpPath, 'r');
+            $header = fgetcsv($handle); // 跳过表头
+            while (($row = fgetcsv($handle)) !== false) {
+                if (count($row) >= 2) {
+                    $devices[] = [
+                        'board_code' => trim($row[0] ?? ''),
+                        'imei' => trim($row[1] ?? ''),
+                        'iccid' => trim($row[2] ?? ''),
+                        'module_code' => trim($row[3] ?? 'QY_QN4G'),
+                    ];
+                }
+            }
+            fclose($handle);
+        } else {
+            // 对于xlsx，尝试用zip方式简单解析
+            $devices = parseXlsxSimple($tmpPath);
+        }
+
+        echo json_encode(['code' => 0, 'data' => ['devices' => $devices]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 注册设备到IOT (POST /api/admin/water-purifier/:id/register-iot)
+    if (preg_match('#^admin/water-purifier/(\d+)/register-iot$#', $path, $matches) && $method === 'POST') {
+        $db = getDB();
+        $deviceId = (int)$matches[1];
+
+        $stmt = $db->prepare("SELECT * FROM ytb_devices WHERE id = ?");
+        $stmt->execute([$deviceId]);
+        $device = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$device) {
+            echo json_encode(['code' => 1, 'message' => '设备不存在'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $boardCode = $device['device_number'] ?: $device['board_code'];
+        $imei = $device['imei'];
+        $moduleCode = $device['module_code'] ?: 'QY_QN4G';
+
+        if (!$boardCode || !$imei) {
+            echo json_encode(['code' => 1, 'message' => '设备缺少主板编码或IMEI'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // 调用七云IOT API注册
+        $iotResult = qiyunIotRequest('/deviceController/addBoard', [
+            'boardCode' => $boardCode, 'imei' => $imei, 'moduleCode' => $moduleCode,
+        ]);
+
+        // 同步到ddg.app的qiyun_devices
+        $tappDb = getTappDB();
+        if ($tappDb) {
+            try {
+                $tappDb->prepare("INSERT IGNORE INTO qiyun_devices (board_code, imei, module_code, brand, device_model, status, iot_registered, billing_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', 1, 'flow', NOW(), NOW())")
+                    ->execute([$boardCode, $imei, $moduleCode, $device['brand'] ?? '', $device['device_model'] ?? '']);
+            } catch (Exception $e) {}
+        }
+
+        $isSuccess = isset($iotResult['code']) && $iotResult['code'] == 0;
+        echo json_encode([
+            'code' => $isSuccess ? 0 : 1,
+            'message' => $isSuccess ? 'IOT注册成功' : ('IOT注册失败: ' . ($iotResult['msg'] ?? '未知错误')),
+            'data' => ['iot_result' => $iotResult],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 同步IOT状态 (POST /api/admin/water-purifier/:id/sync-iot)
+    if (preg_match('#^admin/water-purifier/(\d+)/sync-iot$#', $path, $matches) && $method === 'POST') {
+        $db = getDB();
+        $deviceId = (int)$matches[1];
+
+        $stmt = $db->prepare("SELECT * FROM ytb_devices WHERE id = ?");
+        $stmt->execute([$deviceId]);
+        $device = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$device) {
+            echo json_encode(['code' => 1, 'message' => '设备不存在'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $boardCode = $device['device_number'] ?: $device['board_code'];
+        $iotResult = qiyunIotRequest('/deviceController/getBoardInfoByCode', ['boardCode' => $boardCode]);
+
+        echo json_encode([
+            'code' => 0, 'message' => '同步完成',
+            'data' => ['iot_result' => $iotResult],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 修改IMEI (POST /api/admin/water-purifier/:id/update-imei)
+    if (preg_match('#^admin/water-purifier/(\d+)/update-imei$#', $path, $matches) && $method === 'POST') {
+        $db = getDB();
+        $deviceId = (int)$matches[1];
+        $newImei = trim($input['imei'] ?? '');
+        $syncToIot = (bool)($input['sync_to_iot'] ?? false);
+
+        if (!$newImei) {
+            echo json_encode(['code' => 1, 'message' => '请输入新IMEI'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $stmt = $db->prepare("SELECT * FROM ytb_devices WHERE id = ?");
+        $stmt->execute([$deviceId]);
+        $device = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$device) {
+            echo json_encode(['code' => 1, 'message' => '设备不存在'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // 检查新IMEI是否已使用
+        $checkStmt = $db->prepare("SELECT id FROM ytb_devices WHERE imei = ? AND id != ?");
+        $checkStmt->execute([$newImei, $deviceId]);
+        if ($checkStmt->fetch()) {
+            echo json_encode(['code' => 1, 'message' => '该IMEI已被其他设备使用'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // 更新IMEI
+        $db->prepare("UPDATE ytb_devices SET imei = ? WHERE id = ?")->execute([$newImei, $deviceId]);
+
+        // 同步到IOT
+        $iotResult = null;
+        if ($syncToIot) {
+            $boardCode = $device['device_number'] ?: $device['board_code'];
+            $iotResult = qiyunIotRequest('/deviceController/udpateBoard', [
+                'boardCode' => $boardCode, 'imei' => $newImei,
+            ]);
+            // 更新ddg.app
+            $tappDb = getTappDB();
+            if ($tappDb) {
+                try {
+                    $tappDb->prepare("UPDATE qiyun_devices SET imei = ?, updated_at = NOW() WHERE board_code = ?")
+                        ->execute([$newImei, $boardCode]);
+                } catch (Exception $e) {}
+            }
+        }
+
+        echo json_encode([
+            'code' => 0, 'message' => 'IMEI修改成功' . ($syncToIot ? '（已同步IOT）' : ''),
+            'data' => ['iot_result' => $iotResult],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 删除设备 (DELETE /api/admin/water-purifier/:id)
+    if (preg_match('#^admin/water-purifier/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        $db = getDB();
+        $deviceId = (int)$matches[1];
+
+        $stmt = $db->prepare("SELECT status FROM ytb_devices WHERE id = ?");
+        $stmt->execute([$deviceId]);
+        $device = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$device) {
+            echo json_encode(['code' => 1, 'message' => '设备不存在'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($device['status'] !== 'pending') {
+            echo json_encode(['code' => 1, 'message' => '只能删除待激活状态的设备'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $db->prepare("DELETE FROM ytb_devices WHERE id = ?")->execute([$deviceId]);
+        echo json_encode(['code' => 0, 'message' => '删除成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // ========== 用户预约安装与工单 API ==========
+    function ensureInstallTables($db) {
+        $db->exec("CREATE TABLE IF NOT EXISTS ytb_install_orders (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            order_no VARCHAR(32) NOT NULL UNIQUE,
+            user_id BIGINT UNSIGNED NOT NULL,
+            contact_name VARCHAR(50) NOT NULL,
+            contact_phone VARCHAR(20) NOT NULL,
+            province VARCHAR(50) DEFAULT NULL,
+            city VARCHAR(50) DEFAULT NULL,
+            district VARCHAR(50) DEFAULT NULL,
+            address VARCHAR(500) NOT NULL,
+            preferred_date DATE DEFAULT NULL,
+            preferred_time VARCHAR(50) DEFAULT NULL,
+            remark TEXT DEFAULT NULL,
+            install_fee DECIMAL(10,2) NOT NULL DEFAULT 120.00,
+            payment_status ENUM('pending','paid','refunded') DEFAULT 'pending',
+            paid_at TIMESTAMP NULL DEFAULT NULL,
+            status ENUM('pending','paid','assigned','accepted','picked','installing','completed','cancelled') DEFAULT 'pending',
+            engineer_id BIGINT UNSIGNED DEFAULT NULL,
+            assigned_at TIMESTAMP NULL DEFAULT NULL,
+            accepted_at TIMESTAMP NULL DEFAULT NULL,
+            board_code VARCHAR(50) DEFAULT NULL,
+            picked_at TIMESTAMP NULL DEFAULT NULL,
+            installed_at TIMESTAMP NULL DEFAULT NULL,
+            accessory_order_id BIGINT UNSIGNED DEFAULT NULL,
+            water_test_id BIGINT UNSIGNED DEFAULT NULL,
+            accessory_paid TINYINT(1) NOT NULL DEFAULT 0,
+            test_completed TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX(user_id),
+            INDEX(status),
+            INDEX(engineer_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='水净器安装工单表'");
+
+        $db->exec("CREATE TABLE IF NOT EXISTS ytb_accessory_orders (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            order_no VARCHAR(32) NOT NULL UNIQUE,
+            install_order_id BIGINT UNSIGNED NOT NULL,
+            engineer_id BIGINT UNSIGNED NOT NULL,
+            user_id BIGINT UNSIGNED NOT NULL,
+            items JSON NOT NULL,
+            total_amount DECIMAL(10,2) NOT NULL,
+            payment_status ENUM('pending','paid') DEFAULT 'pending',
+            paid_at TIMESTAMP NULL DEFAULT NULL,
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX(install_order_id),
+            INDEX(user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='安装配件订单表'");
+
+        $db->exec("CREATE TABLE IF NOT EXISTS ytb_water_tests (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            install_order_id BIGINT UNSIGNED NOT NULL,
+            engineer_id BIGINT UNSIGNED NOT NULL,
+            tds_before INT DEFAULT NULL,
+            tds_after INT DEFAULT NULL,
+            tds_photo VARCHAR(500) DEFAULT NULL,
+            electrolysis_before_color VARCHAR(50) DEFAULT NULL,
+            electrolysis_after_color VARCHAR(50) DEFAULT NULL,
+            electrolysis_photo VARCHAR(500) DEFAULT NULL,
+            chlorine_before DECIMAL(5,2) DEFAULT NULL,
+            chlorine_after DECIMAL(5,2) DEFAULT NULL,
+            chlorine_photo VARCHAR(500) DEFAULT NULL,
+            conclusion TEXT DEFAULT NULL,
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX(install_order_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='水质检测报告表'");
+    }
+    
+    // 获取当前用户ID帮助函数
+    function getYtbUserIdFromToken() {
+        $jwt = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        if (strpos($jwt, 'Bearer ') === 0) $jwt = substr($jwt, 7);
+        if (!$jwt) return null;
+        $parts = explode('.', $jwt);
+        if (count($parts) !== 3) return null;
+        $payload = json_decode(base64_decode($parts[1]), true);
+        return $payload['user_id'] ?? null;
+    }
+
+    // 1. 创建预约工单 (POST /api/ytb/install/orders)
+    if ($path === 'ytb/install/orders' && $method === 'POST') {
+        $userId = getYtbUserIdFromToken() ?: 0;
+
+        
+        $db = getDB();
+        ensureInstallTables($db);
+        
+        $orderNo = 'INS' . date('YmdHis') . rand(1000, 9999);
+        $contactName = $input['contact_name'] ?? '';
+        $contactPhone = $input['contact_phone'] ?? '';
+        $province = $input['province'] ?? '';
+        $city = $input['city'] ?? '';
+        $district = $input['district'] ?? '';
+        $address = $input['address'] ?? '';
+        $remark = $input['remark'] ?? '';
+        
+        if (!$contactName || !$contactPhone || !$address) {
+            echo json_encode(['code' => 1, 'message' => '缺少必填信息']); exit;
+        }
+
+        $stmt = $db->prepare("INSERT INTO ytb_install_orders 
+            (order_no, user_id, contact_name, contact_phone, province, city, district, address, remark, install_fee)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 120.00)");
+        $stmt->execute([$orderNo, $userId, $contactName, $contactPhone, $province, $city, $district, $address, $remark]);
+        
+        echo json_encode(['code' => 0, 'data' => ['id' => $db->lastInsertId(), 'order_no' => $orderNo]]);
+        exit;
+    }
+
+    // 2. 获取用户的工单列表 (GET /api/ytb/install/orders)
+    if ($path === 'ytb/install/orders' && $method === 'GET') {
+        $userId = getYtbUserIdFromToken();
+        if (!$userId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        ensureInstallTables($db);
+        
+        $stmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE user_id = ? ORDER BY id DESC");
+        $stmt->execute([$userId]);
+        echo json_encode(['code' => 0, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        exit;
+    }
+
+    // 3. 获取工单详情 (GET /api/ytb/install/orders/:id)
+    if (preg_match('#^ytb/install/orders/(\d+)$#', $path, $matches) && $method === 'GET') {
+        $userId = getYtbUserIdFromToken();
+        if (!$userId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        ensureInstallTables($db);
+        $id = $matches[1];
+        
+        $stmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE id = ?");
+        $stmt->execute([$id]);
+        $order = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$order) { echo json_encode(['code' => 1, 'message' => '工单不存在']); exit; }
+        
+        // 抓取配件
+        if ($order['accessory_order_id']) {
+            $stmt2 = $db->prepare("SELECT * FROM ytb_accessory_orders WHERE id = ?");
+            $stmt2->execute([$order['accessory_order_id']]);
+            $order['accessory'] = $stmt2->fetch(PDO::FETCH_ASSOC);
+            if ($order['accessory'] && is_string($order['accessory']['items'])) {
+                $order['accessory']['items'] = json_decode($order['accessory']['items'], true);
+            }
+        }
+        
+        // 抓取水质测试
+        if ($order['water_test_id']) {
+            $stmt3 = $db->prepare("SELECT * FROM ytb_water_tests WHERE id = ?");
+            $stmt3->execute([$order['water_test_id']]);
+            $order['water_test'] = $stmt3->fetch(PDO::FETCH_ASSOC);
+        }
+
+        echo json_encode(['code' => 0, 'data' => $order]);
+        exit;
+    }
+
+    // 4. 用户模拟支付安装预付费 (POST /api/ytb/install/orders/:id/pay)
+    if (preg_match('#^ytb/install/orders/(\d+)/pay$#', $path, $matches) && $method === 'POST') {
+        $userId = getYtbUserIdFromToken();
+        if (!$userId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        $id = $matches[1];
+        
+        $stmt = $db->prepare("UPDATE ytb_install_orders SET status = 'paid', payment_status = 'paid', paid_at = NOW() WHERE id = ? AND user_id = ? AND status = 'pending'");
+        $stmt->execute([$id, $userId]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['code' => 0, 'message' => '支付成功']);
+        } else {
+            echo json_encode(['code' => 1, 'message' => '状态异常或工单不存在']);
+        }
+        exit;
+    }
+
+    // 4.5 用户激活设备并支付套餐 (POST /api/ytb/install/orders/:id/activate)
+    if (preg_match('#^ytb/install/orders/(\d+)/activate$#', $path, $matches) && $method === 'POST') {
+        $userId = getYtbUserIdFromToken();
+        if (!$userId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        $id = $matches[1];
+        $packageType = $input['package_type'] ?? '';
+        
+        // 此处应当校验套餐存在并且完成实际扣款。演示中省略。
+        $stmt = $db->prepare("UPDATE ytb_install_orders SET status = 'activated', package_type = ?, activated_at = NOW() WHERE id = ? AND user_id = ? AND status = 'completed'");
+        $stmt->execute([$packageType, $id, $userId]);
+        
+        if ($stmt->rowCount() > 0) {
+            // 获取工单详情用于创建设备
+            $stmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE id = ?");
+            $stmt->execute([$id]);
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // 在实际系统中，这应该调用设备的IOT接口去下发激活指令（下发水耗和时间）
+            // 目前将工单写入设备表，并配置模拟初值
+            $db->exec("CREATE TABLE IF NOT EXISTS ytb_devices (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                user_id BIGINT UNSIGNED NOT NULL,
+                board_code VARCHAR(50) NOT NULL UNIQUE,
+                device_model VARCHAR(50) DEFAULT NULL,
+                product_image VARCHAR(500) DEFAULT NULL,
+                billing_mode ENUM('flow','duration') DEFAULT 'flow',
+                surplus_flow INT DEFAULT 0,
+                remaining_days INT DEFAULT 0,
+                is_online TINYINT(1) DEFAULT 1,
+                has_fault TINYINT(1) DEFAULT 0,
+                fault_type VARCHAR(100) DEFAULT NULL,
+                filter_life INT DEFAULT 100,
+                address VARCHAR(255) DEFAULT NULL,
+                brand VARCHAR(50) DEFAULT '万达',
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX(user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备绑定表'");
+            
+            // 写入设备表
+            try {
+                $billingMode = strpos($packageType, 'traffic') !== false ? 'flow' : 'duration';
+                $surplusFlow = $billingMode === 'flow' ? 4000 : 0;
+                $remainingDays = $billingMode === 'duration' ? 365 : 0;
+                
+                $stmt = $db->prepare("INSERT INTO ytb_devices (user_id, board_code, billing_mode, surplus_flow, remaining_days, address) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE billing_mode=VALUES(billing_mode), surplus_flow=surplus_flow+VALUES(surplus_flow), remaining_days=remaining_days+VALUES(remaining_days)");
+                $stmt->execute([$userId, $order['board_code'], $billingMode, $surplusFlow, $remainingDays, $order['install_address']]);
+            } catch (Exception $e) {
+                // Ignore uniqueness conflict if the board_code was already there somehow
+            }
+
+            echo json_encode(['code' => 0, 'message' => '激活成功，设备已开启工作']);
+        } else {
+            echo json_encode(['code' => 1, 'message' => '状态异常或未能激活']);
+        }
+        exit;
+    }
+
+    // ============================================
+    // 工程师端 API (/api/ytb/engineer/...)
+    // (需校验如果是工程师角色，此示例为了让演示能跑，暂且把当前登录用户当工程师)
+    // ============================================
+
+    // 5. 工程师获取可接单与自己的工单 (GET /api/ytb/engineer/orders)
+    if (($path === 'ytb/engineer/orders' || $path === 'ytb/engineer/orders/') && $method === 'GET') {
+        $engineerId = getYtbUserIdFromToken();
+        if (!$engineerId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        ensureInstallTables($db);
+        
+        $type = $_GET['type'] ?? 'my'; // available, my (默认获取自己的工单)
+        $status = $_GET['status'] ?? 'all';
+        
+        if ($type === 'available') {
+            $stmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE status = 'paid' ORDER BY id DESC");
+            $stmt->execute();
+        } else {
+            if ($status !== 'all' && $status) {
+                // 如果传入 DDG 状态，可以映射。但这里直接支持 YTB 字符串
+                if ($status === 'processing') {
+                    $stmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE engineer_id = ? AND status IN ('accepted', 'picked', 'installing') ORDER BY id DESC");
+                } else if ($status === 'pending') {
+                    $stmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE engineer_id = ? AND status = 'paid' ORDER BY id DESC");
+                } else {
+                    $stmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE engineer_id = ? AND status = ? ORDER BY id DESC");
+                }
+                if ($status === 'processing' || $status === 'pending') {
+                    $stmt->execute([$engineerId]);
+                } else {
+                    $stmt->execute([$engineerId, $status]);
+                }
+            } else {
+                $stmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE engineer_id = ? ORDER BY id DESC");
+                $stmt->execute([$engineerId]);
+            }
+        }
+        
+        echo json_encode(['code' => 0, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        exit;
+    }
+
+    // 6. 工程师接单 (POST /api/ytb/engineer/orders/:id/accept)
+    if (preg_match('#^ytb/engineer/orders/(\d+)/accept$#', $path, $matches) && $method === 'POST') {
+        $engineerId = getYtbUserIdFromToken();
+        if (!$engineerId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        $id = $matches[1];
+        
+        $stmt = $db->prepare("UPDATE ytb_install_orders SET status = 'accepted', engineer_id = ?, assigned_at = NOW(), accepted_at = NOW() WHERE id = ? AND status = 'paid'");
+        $stmt->execute([$engineerId, $id]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['code' => 0, 'message' => '接单成功']);
+        } else {
+            echo json_encode(['code' => 1, 'message' => '该工单已被接走或状态异常']);
+        }
+        exit;
+    }
+
+    // 7. 工程师扫码领机 (POST /api/ytb/engineer/orders/:id/pick)
+    if (preg_match('#^ytb/engineer/orders/(\d+)/pick$#', $path, $matches) && $method === 'POST') {
+        $engineerId = getYtbUserIdFromToken();
+        if (!$engineerId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        $id = $matches[1];
+        $boardCode = $input['board_code'] ?? '';
+        
+        if (!$boardCode) { echo json_encode(['code' => 1, 'message' => '请填写/扫描主板编码']); exit; }
+        
+        $stmt = $db->prepare("UPDATE ytb_install_orders SET status = 'picked', board_code = ?, picked_at = NOW() WHERE id = ? AND engineer_id = ? AND status IN ('accepted', 'picked')");
+        $stmt->execute([$boardCode, $id, $engineerId]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['code' => 0, 'message' => '领机成功']);
+        } else {
+            echo json_encode(['code' => 1, 'message' => '状态异常或无权限']);
+        }
+        exit;
+    }
+
+    // 8. 开始安装/设置配件与费用 (POST /api/ytb/engineer/orders/:id/accessories)
+    if (preg_match('#^ytb/engineer/orders/(\d+)/accessories$#', $path, $matches) && $method === 'POST') {
+        $engineerId = getYtbUserIdFromToken();
+        if (!$engineerId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        $id = $matches[1];
+        $items = $input['items'] ?? []; // [{name, price, num}]
+        
+        $orderStmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE id = ? AND engineer_id = ?");
+        $orderStmt->execute([$id, $engineerId]);
+        $order = $orderStmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$order) { echo json_encode(['code' => 1, 'message' => '工单不存在或无权限']); exit; }
+        
+        $totalAmount = 0;
+        foreach ($items as $item) { $totalAmount += ($item['price'] * $item['quantity']); }
+        
+        $accOrderNo = 'ACC' . date('YmdHis') . rand(1000, 9999);
+        
+        // 插入或更新配件单
+        if ($order['accessory_order_id']) {
+            $db->prepare("UPDATE ytb_accessory_orders SET items = ?, total_amount = ? WHERE id = ?")
+               ->execute([json_encode($items, JSON_UNESCAPED_UNICODE), $totalAmount, $order['accessory_order_id']]);
+        } else {
+            $db->prepare("INSERT INTO ytb_accessory_orders (order_no, install_order_id, engineer_id, user_id, items, total_amount) VALUES (?, ?, ?, ?, ?, ?)")
+               ->execute([$accOrderNo, $id, $engineerId, $order['user_id'], json_encode($items, JSON_UNESCAPED_UNICODE), $totalAmount]);
+            $accId = $db->lastInsertId();
+            $db->prepare("UPDATE ytb_install_orders SET accessory_order_id = ? WHERE id = ?")->execute([$accId, $id]);
+        }
+        
+        // 如果开始安装，将状态变为 installing
+        if ($order['status'] === 'picked') {
+            $db->prepare("UPDATE ytb_install_orders SET status = 'installing' WHERE id = ?")->execute([$id]);
+        }
+        
+        echo json_encode(['code' => 0, 'message' => '配件事项已提交，请客户确认付款']);
+        exit;
+    }
+
+    // 9. 用户确认并模拟支付配件费 (POST /api/ytb/install/orders/:id/accessory-pay)
+    if (preg_match('#^ytb/install/orders/(\d+)/accessory-pay$#', $path, $matches) && $method === 'POST') {
+        $userId = getYtbUserIdFromToken();
+        if (!$userId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        $id = $matches[1];
+        
+        $orderStmt = $db->prepare("SELECT accessory_order_id FROM ytb_install_orders WHERE id = ? AND user_id = ?");
+        $orderStmt->execute([$id, $userId]);
+        $accId = $orderStmt->fetchColumn();
+        
+        if (!$accId) { echo json_encode(['code' => 1, 'message' => '无未支付配件订单']); exit; }
+        
+        $db->prepare("UPDATE ytb_accessory_orders SET payment_status = 'paid', paid_at = NOW() WHERE id = ? AND payment_status = 'pending'")->execute([$accId]);
+        $db->prepare("UPDATE ytb_install_orders SET accessory_paid = 1 WHERE id = ?")->execute([$id]);
+        
+        echo json_encode(['code' => 0, 'message' => '配件费支付成功']);
+        exit;
+    }
+
+    // 10. 工程师提交水质检测 (POST /api/ytb/engineer/orders/:id/tests)
+    if (preg_match('#^ytb/engineer/orders/(\d+)/tests$#', $path, $matches) && $method === 'POST') {
+        $engineerId = getYtbUserIdFromToken();
+        if (!$engineerId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        $id = $matches[1];
+        
+        $tdsBefore = $input['tds_before'] ?? 0;
+        $tdsAfter = $input['tds_after'] ?? 0;
+        $elecBefore = $input['electrolysis_before_color'] ?? '';
+        $elecAfter = $input['electrolysis_after_color'] ?? '';
+        $chlorBefore = $input['chlorine_before'] ?? 0;
+        $chlorAfter = $input['chlorine_after'] ?? 0;
+        $photos = $input['photos'] ?? []; // url array
+        $photoStr = implode(',', $photos);
+        
+        $orderStmt = $db->prepare("SELECT * FROM ytb_install_orders WHERE id = ? AND engineer_id = ?");
+        $orderStmt->execute([$id, $engineerId]);
+        $order = $orderStmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$order) { echo json_encode(['code' => 1, 'message' => '工单不存在或无权限']); exit; }
+        
+        if ($order['water_test_id']) {
+            $db->prepare("UPDATE ytb_water_tests SET tds_before=?, tds_after=?, electrolysis_before_color=?, electrolysis_after_color=?, chlorine_before=?, chlorine_after=?, tds_photo=? WHERE id=?")
+               ->execute([$tdsBefore, $tdsAfter, $elecBefore, $elecAfter, $chlorBefore, $chlorAfter, $photoStr, $order['water_test_id']]);
+        } else {
+            $db->prepare("INSERT INTO ytb_water_tests (install_order_id, engineer_id, tds_before, tds_after, electrolysis_before_color, electrolysis_after_color, chlorine_before, chlorine_after, tds_photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+               ->execute([$id, $engineerId, $tdsBefore, $tdsAfter, $elecBefore, $elecAfter, $chlorBefore, $chlorAfter, $photoStr]);
+            $testId = $db->lastInsertId();
+            $db->prepare("UPDATE ytb_install_orders SET water_test_id = ?, test_completed = 1 WHERE id = ?")->execute([$testId, $id]);
+        }
+        
+        echo json_encode(['code' => 0, 'message' => '水质检测提交成功']);
+        exit;
+    }
+
+    // 11. 用户确认测试结果并完成安装单 (POST /api/ytb/install/orders/:id/confirm)
+    if (preg_match('#^ytb/install/orders/(\d+)/confirm$#', $path, $matches) && $method === 'POST') {
+        $userId = getYtbUserIdFromToken();
+        if (!$userId) { echo json_encode(['code' => 401, 'message' => '未登录']); exit; }
+        
+        $db = getDB();
+        $id = $matches[1];
+        
+        $db->prepare("UPDATE ytb_install_orders SET status = 'completed', installed_at = NOW() WHERE id = ? AND user_id = ?")->execute([$id, $userId]);
+        
+        echo json_encode(['code' => 0, 'message' => '服务已确认，由于设备已安装完毕，请扫码绑定设备并购买套餐']);
+        exit;
+    }
+
+    // ========== 套餐管理 API ==========
+
+    // 自动建表函数（与点点够 qiyun_packages 表结构对齐）
+    function ensurePackagesTable($db) {
+        $db->exec("CREATE TABLE IF NOT EXISTS ytb_packages (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL COMMENT '套餐名称',
+            code VARCHAR(50) NOT NULL COMMENT '套餐编码',
+            description TEXT COMMENT '套餐描述',
+            type ENUM('flow','yearly','deposit') NOT NULL COMMENT '类型: flow(流量)/yearly(包年)/deposit(押金)',
+            price DECIMAL(10,2) NOT NULL COMMENT '售价(元)',
+            original_price DECIMAL(10,2) DEFAULT NULL COMMENT '原价(元)',
+            flow_limit INT DEFAULT NULL COMMENT '流量上限(升)',
+            days INT DEFAULT NULL COMMENT '有效期(天)',
+            unit_price DECIMAL(6,2) DEFAULT NULL COMMENT '单价(元/升)',
+            is_first_only TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否仅限首次购买',
+            is_active TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+            sort_order INT NOT NULL DEFAULT 0 COMMENT '排序',
+            brand VARCHAR(50) DEFAULT NULL COMMENT '适用品牌',
+            device_model VARCHAR(50) DEFAULT NULL COMMENT '适用型号',
+            billing_mode VARCHAR(20) DEFAULT 'prepaid' COMMENT '计费方式: prepaid(预付)/postpaid(后付)',
+            is_renewal_only TINYINT(1) DEFAULT 0 COMMENT '是否仅限续费',
+            commission_rate DECIMAL(5,2) DEFAULT 30 COMMENT '提成比例(%)',
+            commission_amount DECIMAL(10,2) DEFAULT 0 COMMENT '提成金额(元)',
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_code (code)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='净水器套餐表(同步点点够qiyun_packages)'");
+
+        // 检查是否需要预置种子数据（与点点够系统完全一致）
+        $count = (int)$db->query("SELECT COUNT(*) FROM ytb_packages")->fetchColumn();
+        if ($count === 0) {
+            $db->exec("INSERT INTO ytb_packages (name, code, description, type, price, original_price, flow_limit, days, unit_price, is_first_only, is_active, sort_order, brand, device_model, billing_mode, is_renewal_only, commission_rate, commission_amount) VALUES
+                ('4000L流量套餐', 'JZQ_XBD_FLOW_4000', '净之泉小扁豆专用，4000升水', 'flow', 980.00, 1200.00, 4000, NULL, NULL, 0, 1, 1, '净之泉', '小扁豆', 'prepaid', 0, 30, 294.00),
+                ('包年不限量套餐', 'JZQ_XBD_YEARLY', '净之泉小扁豆专用，一年内不限流量', 'yearly', 1200.00, 1500.00, NULL, 365, NULL, 0, 1, 2, '净之泉', '小扁豆', 'prepaid', 0, 30, 360.00),
+                ('包年不限量套餐', 'JZQ_SWJ_YEARLY', '净之泉商务机专用，一年内不限流量', 'yearly', 2400.00, 2800.00, NULL, 365, NULL, 0, 1, 3, '净之泉', '商务机', 'prepaid', 0, 30, 720.00),
+                ('4000L流量套餐', 'HM_TL_FLOW_4000', '华迈屠龙专用，4000升水', 'flow', 980.00, 1200.00, 4000, NULL, NULL, 0, 1, 4, '华迈', '屠龙', 'prepaid', 0, 30, 294.00),
+                ('包年不限量套餐', 'HM_TL_YEARLY', '华迈屠龙专用，一年内不限流量', 'yearly', 1200.00, 1500.00, NULL, 365, NULL, 0, 1, 5, '华迈', '屠龙', 'prepaid', 0, 30, 360.00),
+                ('包年不限量套餐', 'HM_DBD_YEARLY', '华迈大扁豆专用，一年内不限流量', 'yearly', 1500.00, 1800.00, NULL, 365, NULL, 0, 1, 6, '华迈', '大扁豆', 'prepaid', 0, 30, 450.00),
+                ('10桶流量包', 'PREPAY_180L', '180L流量包（约10桶），0.3元/L，可购买多份', 'flow', 54.00, NULL, 180, NULL, 0.30, 0, 1, 10, NULL, NULL, NULL, 1, 30, 16.20),
+                ('4000L流量套餐', 'flow_4000', '净之泉大扁豆专用，4000升水', 'flow', 980.00, 980.00, 4000, NULL, 0.25, 0, 1, 7, '净之泉', '大扁豆', 'prepaid', 0, 30, 294.00),
+                ('包年不限量套餐', 'yearly_unlimited', '净之泉大扁豆专用，一年内不限流量', 'yearly', 1200.00, 1200.00, NULL, 365, NULL, 0, 1, 8, '净之泉', '大扁豆', 'prepaid', 0, 30, 360.00)
+            ");
+        }
+    }
+
+    // 管理后台 - 套餐列表 (GET /api/admin/water-purifier/packages)
+    if ($path === 'admin/water-purifier/packages' && $method === 'GET') {
+        $db = getDB();
+        ensurePackagesTable($db);
+
+        $where = [];
+        $params = [];
+
+        if (!empty($_GET['brand'])) {
+            $where[] = "brand = ?";
+            $params[] = $_GET['brand'];
+        }
+        if (!empty($_GET['device_model'])) {
+            $where[] = "device_model = ?";
+            $params[] = $_GET['device_model'];
+        }
+        if (!empty($_GET['type'])) {
+            $where[] = "type = ?";
+            $params[] = $_GET['type'];
+        }
+        if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {
+            $where[] = "is_active = ?";
+            $params[] = (int)$_GET['is_active'];
+        }
+
+        $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+        $sql = "SELECT * FROM ytb_packages $whereClause ORDER BY sort_order ASC, id ASC";
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 类型转换
+        foreach ($list as &$item) {
+            $item['id'] = (int)$item['id'];
+            $item['price'] = (float)$item['price'];
+            $item['original_price'] = $item['original_price'] !== null ? (float)$item['original_price'] : null;
+            $item['flow_limit'] = $item['flow_limit'] !== null ? (int)$item['flow_limit'] : null;
+            $item['days'] = $item['days'] !== null ? (int)$item['days'] : null;
+            $item['unit_price'] = $item['unit_price'] !== null ? (float)$item['unit_price'] : null;
+            $item['commission_rate'] = (float)$item['commission_rate'];
+            $item['commission_amount'] = (float)$item['commission_amount'];
+            $item['sort_order'] = (int)$item['sort_order'];
+            $item['is_active'] = (bool)$item['is_active'];
+            $item['is_first_only'] = (bool)$item['is_first_only'];
+            $item['is_renewal_only'] = (bool)$item['is_renewal_only'];
+        }
+        unset($item);
+
+        echo json_encode(['code' => 0, 'data' => $list], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 管理后台 - 新增套餐 (POST /api/admin/water-purifier/packages)
+    if ($path === 'admin/water-purifier/packages' && $method === 'POST') {
+        $db = getDB();
+        ensurePackagesTable($db);
+
+        $name = trim($input['name'] ?? '');
+        $code = trim($input['code'] ?? '');
+        if (!$name) {
+            echo json_encode(['code' => 400, 'message' => '套餐名称不能为空'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if (!$code) {
+            // 自动生成编码
+            $code = strtoupper(uniqid('PKG_'));
+        }
+
+        $type = $input['type'] ?? 'flow';
+        $price = (float)($input['price'] ?? 0);
+        $originalPrice = isset($input['original_price']) ? (float)$input['original_price'] : null;
+        $flowLimit = isset($input['flow_limit']) ? (int)$input['flow_limit'] : null;
+        $days = isset($input['days']) ? (int)$input['days'] : null;
+        $unitPrice = isset($input['unit_price']) ? (float)$input['unit_price'] : null;
+        $isFirstOnly = (int)($input['is_first_only'] ?? 0);
+        $isActive = isset($input['is_active']) ? ($input['is_active'] ? 1 : 0) : 1;
+        $sortOrder = (int)($input['sort_order'] ?? 0);
+        $brand = $input['brand'] ?? null;
+        $deviceModel = $input['device_model'] ?? null;
+        $billingMode = $input['billing_mode'] ?? 'prepaid';
+        $isRenewalOnly = (int)($input['is_renewal_only'] ?? 0);
+        $commissionRate = (float)($input['commission_rate'] ?? 30);
+        $commissionAmount = (float)($input['commission_amount'] ?? round($price * $commissionRate / 100, 2));
+        $description = trim($input['description'] ?? '');
+
+        $stmt = $db->prepare("INSERT INTO ytb_packages (name, code, description, type, price, original_price, flow_limit, days, unit_price, is_first_only, is_active, sort_order, brand, device_model, billing_mode, is_renewal_only, commission_rate, commission_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$name, $code, $description, $type, $price, $originalPrice, $flowLimit, $days, $unitPrice, $isFirstOnly, $isActive, $sortOrder, $brand, $deviceModel, $billingMode, $isRenewalOnly, $commissionRate, $commissionAmount]);
+
+        echo json_encode(['code' => 0, 'message' => '创建成功', 'data' => ['id' => (int)$db->lastInsertId()]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 管理后台 - 修改套餐 (PUT /api/admin/water-purifier/packages/:id)
+    if (preg_match('#^admin/water-purifier/packages/(\d+)$#', $path, $matches) && $method === 'PUT') {
+        $db = getDB();
+        ensurePackagesTable($db);
+        $id = (int)$matches[1];
+
+        $sets = [];
+        $params = [];
+        $allowedFields = ['name', 'code', 'description', 'type', 'price', 'original_price', 'flow_limit', 'days', 'unit_price', 'brand', 'device_model', 'billing_mode', 'sort_order', 'commission_rate', 'commission_amount'];
+        foreach ($allowedFields as $field) {
+            if (isset($input[$field])) {
+                $sets[] = "$field = ?";
+                $params[] = $input[$field];
+            }
+        }
+        if (isset($input['is_active'])) {
+            $sets[] = "is_active = ?";
+            $params[] = $input['is_active'] ? 1 : 0;
+        }
+        if (isset($input['is_first_only'])) {
+            $sets[] = "is_first_only = ?";
+            $params[] = $input['is_first_only'] ? 1 : 0;
+        }
+        if (isset($input['is_renewal_only'])) {
+            $sets[] = "is_renewal_only = ?";
+            $params[] = $input['is_renewal_only'] ? 1 : 0;
+        }
+
+        // 如果修改了价格或提成比例，自动重新计算提成金额
+        if ((isset($input['price']) || isset($input['commission_rate'])) && !isset($input['commission_amount'])) {
+            $stmt = $db->prepare("SELECT price, commission_rate FROM ytb_packages WHERE id = ?");
+            $stmt->execute([$id]);
+            $old = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($old) {
+                $newPrice = isset($input['price']) ? (float)$input['price'] : (float)$old['price'];
+                $newRate = isset($input['commission_rate']) ? (float)$input['commission_rate'] : (float)$old['commission_rate'];
+                $sets[] = "commission_amount = ?";
+                $params[] = round($newPrice * $newRate / 100, 2);
+            }
+        }
+
+        if (empty($sets)) {
+            echo json_encode(['code' => 400, 'message' => '没有要更新的字段'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $params[] = $id;
+        $sql = "UPDATE ytb_packages SET " . implode(', ', $sets) . " WHERE id = ?";
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+
+        echo json_encode(['code' => 0, 'message' => '更新成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 管理后台 - 删除套餐 (DELETE /api/admin/water-purifier/packages/:id)
+    if (preg_match('#^admin/water-purifier/packages/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        $db = getDB();
+        $id = (int)$matches[1];
+
+        $stmt = $db->prepare("DELETE FROM ytb_packages WHERE id = ?");
+        $stmt->execute([$id]);
+
+        echo json_encode(['code' => 0, 'message' => '删除成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 管理后台 - 设备套餐订单列表 (GET /api/admin/device-package-orders)
+    if ($path === 'admin/device-package-orders' && $method === 'GET') {
+        try {
+            $db = getDB();
+            $tappDb = getTappDB();
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+            $offset = ($page - 1) * $limit;
+
+            $billingMode = isset($_GET['billing_mode']) ? trim($_GET['billing_mode']) : '';
+            $statusFilter = isset($_GET['status']) ? trim($_GET['status']) : '';
+            $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
+
+            // 获取已激活/已安装设备（激活过的）
+            $where = ["d.status IN ('activated', 'installed')"];
+            $params = [];
+
+            if ($billingMode === 'flow') {
+                $where[] = "d.billing_mode = 'flow'";
+            } elseif ($billingMode === 'time') {
+                $where[] = "d.billing_mode = 'time'";
+            }
+
+            if ($keyword !== '') {
+                $where[] = "(d.board_code LIKE ? OR d.device_number LIKE ? OR d.client_address LIKE ?)";
+                $params[] = '%' . $keyword . '%';
+                $params[] = '%' . $keyword . '%';
+                $params[] = '%' . $keyword . '%';
+            }
+
+            $whereClause = 'WHERE ' . implode(' AND ', $where);
+
+            // 从qiyun获取实时套餐数据
+            $qiyunData = [];
+            $onlineCodes = [];
+            $heartbeatMap = [];
+            $qiyunSurplusFlow = [];
+            $qiyunServiceEnd = [];
+            if ($tappDb) {
+                $qiyunStmt = $tappDb->query("SELECT board_code, billing_mode, surplus_flow, service_start_date, service_end_date, last_sync_at FROM qiyun_devices");
+                while ($q = $qiyunStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $bc = $q['board_code'];
+                    $qiyunData[$bc] = $q;
+                    // 在线判断：5分钟内有心跳
+                    if ($q['last_sync_at'] && strtotime($q['last_sync_at']) >= strtotime('-5 minutes')) {
+                        $onlineCodes[] = $bc;
+                    }
+                    $heartbeatMap[$bc] = $q['last_sync_at'];
+                    $qiyunSurplusFlow[$bc] = $q['surplus_flow'];
+                    $qiyunServiceEnd[$bc] = $q['service_end_date'];
+                }
+            }
+
+            // 统计（从ytb_devices）
+            $statsSql = "SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN d.billing_mode = 'flow' THEN 1 ELSE 0 END) as flow_count,
+                SUM(CASE WHEN d.billing_mode = 'time' THEN 1 ELSE 0 END) as time_count
+                FROM ytb_devices d $whereClause";
+            $statsStmt = $db->prepare($statsSql);
+            $statsStmt->execute($params);
+            $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+
+            // 在线设备数
+            $onlineCount = 0;
+            $lowWarning = 0;
+
+            // 过滤在线状态
+            if ($statusFilter === 'online') {
+                $onlineCodesFiltered = array_filter($onlineCodes);
+                if (!empty($onlineCodesFiltered)) {
+                    $where[] = "d.board_code IN ('" . implode("','", $onlineCodesFiltered) . "')";
+                } else {
+                    $where[] = "1=0"; // 没有在线设备
+                }
+            } elseif ($statusFilter === 'offline') {
+                $offlineCodes = array_diff(array_keys($qiyunData), $onlineCodes);
+                if (!empty($offlineCodes)) {
+                    $where[] = "(d.board_code NOT IN ('" . implode("','", array_map('strval', array_filter($offlineCodes))) . "') OR d.board_code IS NULL)";
+                } else {
+                    $where[] = "1=1"; // 全部在线但要求离线时显示空
+                }
+            }
+            $whereClause = 'WHERE ' . implode(' AND ', $where);
+
+            // 总数
+            $countSql = "SELECT COUNT(*) FROM ytb_devices d $whereClause";
+            $countStmt = $db->prepare($countSql);
+            $countStmt->execute($params);
+            $total = (int)$countStmt->fetchColumn();
+
+            // 列表
+            $listSql = "SELECT d.* FROM ytb_devices d $whereClause ORDER BY d.id DESC LIMIT $limit OFFSET $offset";
+            $listStmt = $db->prepare($listSql);
+            $listStmt->execute($params);
+            $list = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // 获取用户信息
+            $userIds = array_filter(array_column($list, 'ytb_user_id'));
+            $userMap = [];
+            if (!empty($userIds)) {
+                $up = implode(',', array_fill(0, count($userIds), '?'));
+                $userStmt = $db->prepare("SELECT id, nickname, phone FROM ytb_users WHERE id IN ($up)");
+                $userStmt->execute(array_values($userIds));
+                while ($u = $userStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $userMap[$u['id']] = $u;
+                }
+            }
+
+            // 重新计算在线状态和预警
+            $onlineCodesSet = array_flip($onlineCodes);
+            foreach ($list as &$d) {
+                $bc = $d['board_code'];
+                $uid = $d['ytb_user_id'];
+
+                // 用户信息
+                if (isset($userMap[$uid])) {
+                    $d['user_name'] = $userMap[$uid]['nickname'];
+                    $d['user_phone'] = $userMap[$uid]['phone'] ?? '';
+                } else {
+                    $d['user_name'] = $d['client_name'] ?? '';
+                    $d['user_phone'] = $d['client_phone'] ?? '';
+                }
+
+                // 在线状态
+                $d['is_online'] = isset($onlineCodesSet[$bc]);
+                $d['last_heartbeat'] = $heartbeatMap[$bc] ?? null;
+
+                // 套餐剩余量（从qiyun实时获取）
+                $d['surplus_flow'] = isset($qiyunSurplusFlow[$bc]) ? (float)$qiyunSurplusFlow[$bc] : (float)($d['surplus_flow'] ?? 0);
+                $serviceEndDate = $qiyunServiceEnd[$bc] ?? $d['service_end_date'] ?? null;
+                $d['service_end_date'] = $serviceEndDate;
+
+                // 计算剩余天数
+                $d['remaining_days'] = 0;
+                if ($serviceEndDate) {
+                    $end = strtotime($serviceEndDate);
+                    $now = time();
+                    $d['remaining_days'] = max(0, ceil(($end - $now) / 86400));
+                }
+
+                // 低量预警
+                if ($d['is_online']) {
+                    if ($d['billing_mode'] === 'flow' && $d['surplus_flow'] < 500) {
+                        $lowWarning++;
+                    } elseif ($d['billing_mode'] === 'time' && $d['remaining_days'] < 30) {
+                        $lowWarning++;
+                    }
+                }
+            }
+            unset($d);
+
+            $onlineCount = count(array_filter($list, fn($d) => $d['is_online']));
+
+            echo json_encode([
+                'code' => 0,
+                'data' => [
+                    'list' => $list,
+                    'total' => $total,
+                    'stats' => [
+                        'total' => (int)($stats['total'] ?? 0),
+                        'flow_count' => (int)($stats['flow_count'] ?? 0),
+                        'duration_count' => (int)($stats['time_count'] ?? 0),
+                        'online' => $onlineCount,
+                        'low_warning' => $lowWarning
+                    ]
+                ]
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        } catch (Exception $e) {
+            error_log("device-package-orders error: " . $e->getMessage());
+            echo json_encode(['code' => 500, 'message' => '服务器错误: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
+
+    // 管理后台 - 安装订单列表 (GET /api/admin/water-purifier/install-orders)
+    if ($path === 'admin/water-purifier/install-orders' && $method === 'GET') {
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $pageSize = min(100, max(1, intval($_GET['per_page'] ?? 15)));
+        $offset = ($page - 1) * $pageSize;
+
+        $status = isset($_GET['status']) ? trim($_GET['status']) : '';
+        $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
+
+        $db = getDB();
+
+        $where = [];
+        $params = [];
+
+        if ($status !== '') {
+            $where[] = "status = ?";
+            $params[] = $status;
+        }
+
+        if ($keyword !== '') {
+            $where[] = "(order_no LIKE ? OR device_number LIKE ? OR customer_name LIKE ?)";
+            $params[] = '%' . $keyword . '%';
+            $params[] = '%' . $keyword . '%';
+            $params[] = '%' . $keyword . '%';
+        }
+
+        $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $countSql = "SELECT COUNT(*) FROM ytb_install_orders $whereClause";
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetchColumn();
+
+        $listSql = "SELECT * FROM ytb_install_orders $whereClause ORDER BY id DESC LIMIT $pageSize OFFSET $offset";
+        $listStmt = $db->prepare($listSql);
+        $listStmt->execute($params);
+        $list = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($list as &$item) {
+            $item['id'] = (int)$item['id'];
+        }
+        unset($item);
+
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => [
+                'data' => $list,
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $pageSize,
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 管理后台 - 安装订单统计 (GET /api/admin/water-purifier/install-orders/stats)
+    if ($path === 'admin/water-purifier/install-orders/stats' && $method === 'GET') {
+        $db = getDB();
+
+        $today = date('Y-m-d');
+        $yesterday = date('Y-m-d', strtotime('-1 day'));
+        $weekAgo = date('Y-m-d', strtotime('-7 days'));
+        $monthAgo = date('Y-m-d', strtotime('-30 days'));
+
+        $stats = [
+            'today' => ['amount' => 0, 'count' => 0],
+            'yesterday' => ['amount' => 0, 'count' => 0],
+            'week' => ['amount' => 0, 'count' => 0],
+            'month' => ['amount' => 0, 'count' => 0],
+            'total_paid' => ['amount' => 0, 'count' => 0],
+            'total' => ['amount' => 0, 'count' => 0],
+        ];
+
+        try {
+            $periods = [
+                'today' => $today,
+                'yesterday' => $yesterday,
+                'week' => $weekAgo,
+                'month' => $monthAgo,
+            ];
+
+            foreach ($periods as $key => $startDate) {
+                $sql = "SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as amt FROM ytb_install_orders WHERE DATE(created_at) >= ? AND status != 'cancelled'";
+                $stmt = $db->prepare($sql);
+                $stmt->execute([$startDate]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                $stats[$key] = ['amount' => floatval($row['amt'] ?? 0), 'count' => (int)($row['cnt'] ?? 0)];
+            }
+
+            $sql = "SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as amt FROM ytb_install_orders WHERE status = 'paid'";
+            $stmt = $db->prepare($sql);
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $stats['total_paid'] = ['amount' => floatval($row['amt'] ?? 0), 'count' => (int)($row['cnt'] ?? 0)];
+
+            $sql = "SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as amt FROM ytb_install_orders WHERE status != 'cancelled'";
+            $stmt = $db->prepare($sql);
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $stats['total'] = ['amount' => floatval($row['amt'] ?? 0), 'count' => (int)($row['cnt'] ?? 0)];
+        } catch (Exception $e) {
+        }
+
+        echo json_encode(['code' => 0, 'data' => $stats], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 小程序/H5端 - 获取可用套餐列表 (GET /api/ytb/packages)
+    if ($path === 'ytb/packages' && $method === 'GET') {
+        $db = getDB();
+        ensurePackagesTable($db);
+
+        $where = ["is_active = 1"];
+        $params = [];
+
+        if (!empty($_GET['brand'])) {
+            $where[] = "(brand = ? OR brand IS NULL)";
+            $params[] = $_GET['brand'];
+        }
+        if (!empty($_GET['device_model'])) {
+            $where[] = "(device_model = ? OR device_model IS NULL)";
+            $params[] = $_GET['device_model'];
+        }
+        if (!empty($_GET['type'])) {
+            $where[] = "type = ?";
+            $params[] = $_GET['type'];
+        }
+
+        $whereClause = 'WHERE ' . implode(' AND ', $where);
+        $sql = "SELECT id, name, code, description, type, price, original_price, flow_limit, days, unit_price, brand, device_model, is_first_only, is_renewal_only FROM ytb_packages $whereClause ORDER BY sort_order ASC";
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($list as &$item) {
+            $item['id'] = (int)$item['id'];
+            $item['price'] = (float)$item['price'];
+            $item['original_price'] = $item['original_price'] !== null ? (float)$item['original_price'] : null;
+            $item['flow_limit'] = $item['flow_limit'] !== null ? (int)$item['flow_limit'] : null;
+            $item['days'] = $item['days'] !== null ? (int)$item['days'] : null;
+            $item['unit_price'] = $item['unit_price'] !== null ? (float)$item['unit_price'] : null;
+            $item['is_first_only'] = (bool)$item['is_first_only'];
+            $item['is_renewal_only'] = (bool)$item['is_renewal_only'];
+        }
+        unset($item);
+
+        echo json_encode(['code' => 0, 'data' => $list], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 生成小程序码 (GET /api/ytb/miniapp/wxacode?scene=xxx&page=xxx)
+    if ($path === 'ytb/miniapp/wxacode' && $method === 'GET') {
+        $scene = $_GET['scene'] ?? '';
+        $page = $_GET['page'] ?? 'pages/installations/booking';
+        
+        if (!$scene) {
+            echo json_encode(['code' => 1, 'message' => '缺少scene参数'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // 获取小程序 access_token
+        $miniAppId = 'wx5643a45f1e914b29';
+        $miniSecret = 'd43623e961bd5459f6b3eb1f5130cc30';
+        
+        // 先尝试从缓存获取
+        $db = getDB();
+        $cacheKey = 'miniapp_access_token_' . $miniAppId;
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS cache_store (
+                cache_key VARCHAR(100) PRIMARY KEY,
+                cache_value TEXT,
+                expires_at INT
+            )");
+            $stmt = $db->prepare("SELECT cache_value, expires_at FROM cache_store WHERE cache_key = ?");
+            $stmt->execute([$cacheKey]);
+            $cached = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($cached && $cached['expires_at'] > time()) {
+                $accessToken = $cached['cache_value'];
+            }
+        } catch (Exception $e) {}
+
+        if (empty($accessToken)) {
+            $tokenUrl = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={$miniAppId}&secret={$miniSecret}";
+            $tokenRes = wechatApiGetJson($tokenUrl);
+            if (!$tokenRes || empty($tokenRes['access_token'])) {
+                echo json_encode(['code' => 1, 'message' => '获取access_token失败', 'debug' => $tokenRes], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $accessToken = $tokenRes['access_token'];
+            $expiresIn = $tokenRes['expires_in'] ?? 7200;
+            // 缓存 token
+            try {
+                $stmt = $db->prepare("REPLACE INTO cache_store (cache_key, cache_value, expires_at) VALUES (?, ?, ?)");
+                $stmt->execute([$cacheKey, $accessToken, time() + $expiresIn - 300]);
+            } catch (Exception $e) {}
+        }
+
+        // 调用 wxacode.getUnlimited 生成小程序码
+        $wxacodeUrl = "https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token={$accessToken}";
+        $postData = json_encode([
+            'scene' => $scene,
+            'page' => $page,
+            'width' => 430,
+            'auto_color' => false,
+            'line_color' => ['r' => 79, 'g' => 70, 'b' => 229],
+            'is_hyaline' => false,
+            'env_version' => 'trial'  // trial=体验版, release=正式版
+        ]);
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $wxacodeUrl,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postData,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+
+        // 如果返回的是图片
+        if ($response && strpos($contentType, 'image') !== false) {
+            $base64 = base64_encode($response);
+            echo json_encode([
+                'code' => 0,
+                'data' => [
+                    'image' => 'data:image/png;base64,' . $base64,
+                    'scene' => $scene,
+                    'page' => $page
+                ]
+            ], JSON_UNESCAPED_UNICODE);
+        } else {
+            // 返回的是错误JSON
+            $errData = json_decode($response, true);
+            echo json_encode([
+                'code' => 1,
+                'message' => '生成小程序码失败',
+                'debug' => $errData
+            ], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     // 404
     http_response_code(404);
     echo json_encode(['code' => 404, 'message' => '接口不存在']);
@@ -4139,6 +6001,62 @@ function getWechatJsapiTicket($db, $appId) {
 function generateWechatSignature($url, $timestamp, $nonceStr, $ticket) {
     $str = "jsapi_ticket={$ticket}&noncestr={$nonceStr}&timestamp={$timestamp}&url={$url}";
     return sha1($str);
+}
+
+function parseXlsxSimple($filePath) {
+    $devices = [];
+    if (!class_exists('ZipArchive')) return $devices;
+
+    $zip = new ZipArchive();
+    if ($zip->open($filePath) !== true) return $devices;
+
+    // 读取shared strings
+    $sharedStrings = [];
+    $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+    if ($ssXml) {
+        $ss = simplexml_load_string($ssXml);
+        if ($ss) {
+            foreach ($ss->si as $si) {
+                $sharedStrings[] = (string)$si->t;
+            }
+        }
+    }
+
+    // 读取sheet1
+    $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+    $zip->close();
+    if (!$sheetXml) return $devices;
+
+    $sheet = simplexml_load_string($sheetXml);
+    if (!$sheet || !isset($sheet->sheetData)) return $devices;
+
+    $rows = [];
+    foreach ($sheet->sheetData->row as $row) {
+        $cells = [];
+        foreach ($row->c as $cell) {
+            $value = (string)$cell->v;
+            $type = (string)$cell['t'];
+            if ($type === 's' && isset($sharedStrings[(int)$value])) {
+                $value = $sharedStrings[(int)$value];
+            }
+            $cells[] = $value;
+        }
+        $rows[] = $cells;
+    }
+
+    // 跳过表头(第一行)
+    for ($i = 1; $i < count($rows); $i++) {
+        $r = $rows[$i];
+        if (count($r) >= 2 && !empty(trim($r[0]))) {
+            $devices[] = [
+                'board_code' => trim($r[0] ?? ''),
+                'imei' => trim($r[1] ?? ''),
+                'iccid' => trim($r[2] ?? ''),
+                'module_code' => trim($r[3] ?? 'QY_QN4G'),
+            ];
+        }
+    }
+    return $devices;
 }
 
 function buildMenuTree($menus, $parentId = 0) {

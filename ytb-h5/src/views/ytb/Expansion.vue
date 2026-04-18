@@ -94,7 +94,7 @@ const previewPoster = (poster) => {
 
 onMounted(async () => {
   if (!isLoggedIn()) {
-    router.replace('/ytb/login')
+    router.replace('/login')
     return
   }
 

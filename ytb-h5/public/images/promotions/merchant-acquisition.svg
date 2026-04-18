@@ -1,0 +1,60 @@
+<svg width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7a45" />
+      <stop offset="55%" stop-color="#ff9f5a" />
+      <stop offset="100%" stop-color="#ffd37a" />
+    </linearGradient>
+    <linearGradient id="cardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.94" />
+      <stop offset="100%" stop-color="#fff7ed" stop-opacity="0.98" />
+    </linearGradient>
+    <filter id="cardShadow" x="-8%" y="-10%" width="116%" height="130%">
+      <feOffset dy="28" input="SourceAlpha" />
+      <feGaussianBlur stdDeviation="36" />
+      <feComposite in2="SourceAlpha" operator="out" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.68 0 0 0 0 0.36 0 0 0 0 0.08 0 0 0 0.16 0" />
+      <feBlend in="SourceGraphic" />
+    </filter>
+  </defs>
+  <rect width="1080" height="1920" fill="url(#bgGradient)" />
+  <g transform="translate(120, 200)">
+    <text x="0" y="0" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="80" font-weight="600" fill="#ffffff">点点够商户助手</text>
+    <text x="0" y="110" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="66" font-weight="500" fill="#ffffff">全渠道收单 · 即开即用 · 极速到账</text>
+  </g>
+  <g transform="translate(100, 420)">
+    <rect width="880" height="620" rx="48" fill="url(#cardGradient)" filter="url(#cardShadow)" />
+    <text x="72" y="140" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="52" font-weight="600" fill="#4f2800">吸引商户的理由</text>
+    <g fill="#8c4500" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="40">
+      <text x="72" y="240">• 0 元进件，线上审核，最快 2 小时开通</text>
+      <text x="72" y="320">• 微信、支付宝、银联扫码一码收</text>
+      <text x="72" y="400">• 支持电商小程序、外卖、美团闪付</text>
+      <text x="72" y="480">• 资金 D+1 结算，微信专属客服</text>
+    </g>
+    <g transform="translate(600, 200)">
+      <rect x="0" y="0" width="220" height="220" rx="32" fill="#ffe7cf" />
+      <path d="M60 160l60-80 34 40 56-72 46 76H60z" fill="#ff8a34" />
+      <circle cx="62" cy="70" r="26" fill="#ffb066" opacity="0.7" />
+      <circle cx="158" cy="60" r="18" fill="#ffb066" opacity="0.4" />
+    </g>
+  </g>
+  <g transform="translate(100, 1110)">
+    <rect width="880" height="540" rx="48" fill="url(#cardGradient)" filter="url(#cardShadow)" />
+    <text x="72" y="150" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="52" font-weight="600" fill="#4f2800">营销玩法</text>
+    <g fill="#8c4500" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="40">
+      <text x="72" y="240">• 门店会员储值 · 积分商城 · 优惠券</text>
+      <text x="72" y="320">• 智能海报中心，节日素材随时投放</text>
+      <text x="72" y="400">• LBS 门店曝光，连接 5 公里潜在客户</text>
+      <text x="72" y="480">• 分润可视化，机构实时掌握表现</text>
+    </g>
+    <g transform="translate(600, 140)">
+      <rect x="0" y="0" width="220" height="220" rx="32" fill="#ffe0bd" />
+      <path d="M70 170c72-18 128-54 164-112-12 88-72 160-144 184-12-20-18-40-20-72z" fill="#ff8a34" opacity="0.8" />
+      <circle cx="150" cy="74" r="36" fill="#ffc48d" opacity="0.65" />
+    </g>
+  </g>
+  <g transform="translate(120, 1760)">
+    <rect width="840" height="100" rx="50" fill="#6c2a00" opacity="0.85" />
+    <text x="80" y="68" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="46" font-weight="600" fill="#ffffff">扫码体验点点够商户平台，立享交易红包</text>
+  </g>
+</svg>

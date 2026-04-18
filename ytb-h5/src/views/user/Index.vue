@@ -142,6 +142,13 @@
           <div class="quick-text">商户管理</div>
         </div>
 
+        <div class="quick-item" @click="$router.push('/installation/bookings')">
+          <div class="quick-icon purifier">
+            <van-icon name="logistics" size="24" />
+          </div>
+          <div class="quick-text">我的安装</div>
+        </div>
+
         <div class="quick-item" v-if="hasRole('is_vip')" @click="$router.push('/vip')">
           <div class="quick-icon vip">
             <van-icon name="gem-o" size="24" />

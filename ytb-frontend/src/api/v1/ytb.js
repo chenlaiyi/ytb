@@ -78,7 +78,7 @@ export function getUserTeam(id, params) {
  */
 export function getUpgrades(params) {
   return service({
-    url: `${BASE_URL}/upgrades`,
+    url: `${BASE_URL}/ytb/upgrades`,
     method: 'get',
     params
   })
@@ -89,7 +89,7 @@ export function getUpgrades(params) {
  */
 export function getUpgradeDetail(id) {
   return service({
-    url: `${BASE_URL}/upgrades/${id}`,
+    url: `${BASE_URL}/ytb/upgrades/${id}`,
     method: 'get'
   })
 }
@@ -99,7 +99,7 @@ export function getUpgradeDetail(id) {
  */
 export function getUpgradeStatistics() {
   return service({
-    url: `${BASE_URL}/upgrades/statistics`,
+    url: `${BASE_URL}/ytb/upgrades/statistics`,
     method: 'get'
   })
 }
@@ -109,7 +109,7 @@ export function getUpgradeStatistics() {
  */
 export function approveUpgrade(id, remark = '') {
   return service({
-    url: `${BASE_URL}/upgrades/${id}/approve`,
+    url: `${BASE_URL}/ytb/upgrades/${id}/approve`,
     method: 'post',
     data: { remark }
   })
@@ -120,7 +120,7 @@ export function approveUpgrade(id, remark = '') {
  */
 export function rejectUpgrade(id, remark) {
   return service({
-    url: `${BASE_URL}/upgrades/${id}/reject`,
+    url: `${BASE_URL}/ytb/upgrades/${id}/reject`,
     method: 'post',
     data: { remark }
   })
@@ -131,7 +131,7 @@ export function rejectUpgrade(id, remark) {
  */
 export function confirmPayment(id, transactionId = '') {
   return service({
-    url: `${BASE_URL}/upgrades/${id}/confirm-payment`,
+    url: `${BASE_URL}/ytb/upgrades/${id}/confirm-payment`,
     method: 'post',
     data: { transaction_id: transactionId }
   })
@@ -144,7 +144,7 @@ export function confirmPayment(id, transactionId = '') {
  */
 export function getCommissions(params) {
   return service({
-    url: `${BASE_URL}/commissions`,
+    url: `${BASE_URL}/ytb/commissions`,
     method: 'get',
     params
   })
@@ -155,7 +155,7 @@ export function getCommissions(params) {
  */
 export function getCommissionDetail(id) {
   return service({
-    url: `${BASE_URL}/commissions/${id}`,
+    url: `${BASE_URL}/ytb/commissions/${id}`,
     method: 'get'
   })
 }
@@ -165,7 +165,7 @@ export function getCommissionDetail(id) {
  */
 export function getCommissionStatistics() {
   return service({
-    url: `${BASE_URL}/commissions/statistics`,
+    url: `${BASE_URL}/ytb/commissions/statistics`,
     method: 'get'
   })
 }
@@ -175,7 +175,7 @@ export function getCommissionStatistics() {
  */
 export function getCommissionRanking(params) {
   return service({
-    url: `${BASE_URL}/commissions/ranking`,
+    url: `${BASE_URL}/ytb/commissions/ranking`,
     method: 'get',
     params
   })
@@ -186,7 +186,7 @@ export function getCommissionRanking(params) {
  */
 export function settleCommission(id, remark = '') {
   return service({
-    url: `${BASE_URL}/commissions/${id}/settle`,
+    url: `${BASE_URL}/ytb/commissions/${id}/settle`,
     method: 'post',
     data: { remark }
   })
@@ -197,7 +197,7 @@ export function settleCommission(id, remark = '') {
  */
 export function cancelCommission(id, remark = '') {
   return service({
-    url: `${BASE_URL}/commissions/${id}/cancel`,
+    url: `${BASE_URL}/ytb/commissions/${id}/cancel`,
     method: 'post',
     data: { remark }
   })
@@ -208,7 +208,7 @@ export function cancelCommission(id, remark = '') {
  */
 export function batchSettleCommissions(ids) {
   return service({
-    url: `${BASE_URL}/commissions/batch-settle`,
+    url: `${BASE_URL}/ytb/commissions/batch-settle`,
     method: 'post',
     data: { ids }
   })
@@ -221,7 +221,7 @@ export function batchSettleCommissions(ids) {
  */
 export function getStatistics() {
   return service({
-    url: `${BASE_URL}/statistics`,
+    url: `${BASE_URL}/ytb/statistics`,
     method: 'get'
   })
 }
@@ -231,7 +231,7 @@ export function getStatistics() {
  */
 export function getUserTrend(days = 30) {
   return service({
-    url: `${BASE_URL}/statistics/user-trend`,
+    url: `${BASE_URL}/ytb/statistics/user-trend`,
     method: 'get',
     params: { days }
   })
@@ -242,7 +242,7 @@ export function getUserTrend(days = 30) {
  */
 export function getRevenueTrend(days = 30) {
   return service({
-    url: `${BASE_URL}/statistics/revenue-trend`,
+    url: `${BASE_URL}/ytb/statistics/revenue-trend`,
     method: 'get',
     params: { days }
   })
@@ -253,7 +253,7 @@ export function getRevenueTrend(days = 30) {
  */
 export function getUpgradeTrend(days = 30) {
   return service({
-    url: `${BASE_URL}/statistics/upgrade-trend`,
+    url: `${BASE_URL}/ytb/statistics/upgrade-trend`,
     method: 'get',
     params: { days }
   })
@@ -264,7 +264,7 @@ export function getUpgradeTrend(days = 30) {
  */
 export function getTeamCpRanking(limit = 10) {
   return service({
-    url: `${BASE_URL}/statistics/team-cp-ranking`,
+    url: `${BASE_URL}/ytb/statistics/team-cp-ranking`,
     method: 'get',
     params: { limit }
   })
@@ -275,7 +275,7 @@ export function getTeamCpRanking(limit = 10) {
  */
 export function getScpRanking(limit = 10) {
   return service({
-    url: `${BASE_URL}/statistics/scp-ranking`,
+    url: `${BASE_URL}/ytb/statistics/scp-ranking`,
     method: 'get',
     params: { limit }
   })
@@ -286,7 +286,7 @@ export function getScpRanking(limit = 10) {
  */
 export function getConfigs() {
   return service({
-    url: `${BASE_URL}/configs`,
+    url: `${BASE_URL}/ytb/configs`,
     method: 'get'
   })
 }
@@ -309,7 +309,7 @@ export function updateConfigs(data) {
  */
 export function getInvestments(params) {
   return service({
-    url: `${BASE_URL}/investments`,
+    url: `${BASE_URL}/ytb/investments`,
     method: 'get',
     params
   })
@@ -320,7 +320,7 @@ export function getInvestments(params) {
  */
 export function getInvestmentDetail(id) {
   return service({
-    url: `${BASE_URL}/investments/${id}`,
+    url: `${BASE_URL}/ytb/investments/${id}`,
     method: 'get'
   })
 }
@@ -330,7 +330,7 @@ export function getInvestmentDetail(id) {
  */
 export function getInvestmentStatistics() {
   return service({
-    url: `${BASE_URL}/investments/statistics`,
+    url: `${BASE_URL}/ytb/investments/statistics`,
     method: 'get'
   })
 }
@@ -340,7 +340,7 @@ export function getInvestmentStatistics() {
  */
 export function confirmInvestmentPayment(id, transactionId = '') {
   return service({
-    url: `${BASE_URL}/investments/${id}/confirm-payment`,
+    url: `${BASE_URL}/ytb/investments/${id}/confirm-payment`,
     method: 'post',
     data: { transaction_id: transactionId }
   })
@@ -351,7 +351,7 @@ export function confirmInvestmentPayment(id, transactionId = '') {
  */
 export function cancelInvestment(id, remark = '') {
   return service({
-    url: `${BASE_URL}/investments/${id}/cancel`,
+    url: `${BASE_URL}/ytb/investments/${id}/cancel`,
     method: 'post',
     data: { remark }
   })
@@ -439,6 +439,19 @@ export function batchCompleteWithdrawals(ids) {
 export function exportWithdrawals(params) {
   return service({
     url: `${BASE_URL}/withdrawals/export`,
+    method: 'get',
+    params
+  })
+}
+
+// ==================== 设备心跳管理 ====================
+
+/**
+ * 获取设备心跳列表
+ */
+export function getDeviceHeartbeats(params) {
+  return service({
+    url: `${BASE_URL}/ytb/devices/heartbeats`,
     method: 'get',
     params
   })
@@ -604,6 +617,8 @@ export default {
   // 安装记录管理
   getInstallations,
   getInstallationDetail,
+  // 设备心跳管理
+  getDeviceHeartbeats,
   getInstallationStatistics,
   settleInstallation,
   batchSettleInstallations,

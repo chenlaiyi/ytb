@@ -118,7 +118,7 @@ const statusOptions = [
 // 初始化
 onMounted(async () => {
   if (!isLoggedIn()) {
-    router.replace('/ytb/login')
+    router.replace('/login')
     return
   }
 
@@ -208,7 +208,7 @@ const getStatusType = (status) => {
 }
 
 // 跳转到提现页面
-const goToWithdraw = () => router.push('/ytb/withdraw')
+const goToWithdraw = () => router.push('/withdraw')
 
 // 返回
 const goBack = () => router.back()

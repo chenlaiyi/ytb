@@ -1,0 +1,15 @@
+Tables_in_ytb_ddg_org_cn
+cache
+ytb_admin_menus
+ytb_admin_users
+ytb_boss_investments
+ytb_commissions
+ytb_configs
+ytb_devices
+ytb_invite_codes
+ytb_posters
+ytb_site_configs
+ytb_upgrade_applications
+ytb_users
+ytb_water_installations
+ytb_withdrawals

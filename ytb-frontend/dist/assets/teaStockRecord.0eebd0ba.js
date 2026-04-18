@@ -1,0 +1,1 @@
+import{r as t}from"./request.c687e8aa.js";function o(e){return t({url:"/api/admin/v1/tea-stock-records",method:"get",params:e})}function c(e){return t({url:`/api/admin/v1/tea-stock-records/${e}`,method:"get"})}function s(e){return t({url:"/api/admin/v1/tea-stock-records/export",method:"get",params:e,responseType:"blob"})}export{s as e,o as f,c as g};
