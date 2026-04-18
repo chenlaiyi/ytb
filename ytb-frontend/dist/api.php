@@ -443,6 +443,7 @@ try {
                 'phone' => $user['phone'] ?? '',
                 'real_name' => $user['real_name'] ?? '',
                 'role' => $user['role'] ?? 'normal',
+                'is_engineer' => (bool)($user['is_engineer'] ?? false),
                 'invite_code' => $user['invite_code'] ?? '',
                 'available_balance' => $user['available_balance'] ?? '0.00',
                 'frozen_balance' => $user['frozen_balance'] ?? '0.00',
@@ -575,10 +576,12 @@ try {
                 if ($deviceNumber) {
                     try {
                         $tappDb = getTappDB();
-                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, last_sync_at FROM qiyun_devices WHERE board_code = ? LIMIT 1");
+                        // 从 qiyun_devices 获取在线状态、品牌、流量、滤芯等完整数据
+                        $qdStmt = $tappDb->prepare("SELECT board_code, brand, device_model, last_sync_at, cumulative_flow, surplus_flow, total_recharged_flow, f1_flux, f1_flux_max, f2_flux, f2_flux_max, f3_flux, f3_flux_max, f4_flux, f4_flux_max FROM qiyun_devices WHERE board_code = ? LIMIT 1");
                         $qdStmt->execute([$deviceNumber]);
                         $qd = $qdStmt->fetch(PDO::FETCH_ASSOC) ?: [];
                         
+                        // tapp_devices 作为补充数据源
                         $tdStmt = $tappDb->prepare("SELECT * FROM tapp_devices WHERE device_number = ? LIMIT 1");
                         $tdStmt->execute([$deviceNumber]);
                         $td = $tdStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -591,15 +594,49 @@ try {
                     $is_online = (time() - strtotime($qd['last_sync_at'])) < 300;
                 }
 
-                $fl1 = !empty($td['f1_flux_max']) && $td['f1_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f1_flux']??0) / $td['f1_flux_max']) * 100))) : 100;
-                $fl2 = !empty($td['f2_flux_max']) && $td['f2_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f2_flux']??0) / $td['f2_flux_max']) * 100))) : 100;
-                $fl3 = !empty($td['f3_flux_max']) && $td['f3_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f3_flux']??0) / $td['f3_flux_max']) * 100))) : 100;
-                $fl4 = !empty($td['f4_flux_max']) && $td['f4_flux_max'] > 0 ? max(0, min(100, round((1 - ($td['f4_flux']??0) / $td['f4_flux_max']) * 100))) : 100;
+                // 滤芯寿命：优先 qiyun_devices，fallback tapp_devices
+                $f1flux = $qd['f1_flux'] ?? $td['f1_flux'] ?? 0;
+                $f1max  = $qd['f1_flux_max'] ?? $td['f1_flux_max'] ?? 0;
+                $f2flux = $qd['f2_flux'] ?? $td['f2_flux'] ?? 0;
+                $f2max  = $qd['f2_flux_max'] ?? $td['f2_flux_max'] ?? 0;
+                $f3flux = $qd['f3_flux'] ?? $td['f3_flux'] ?? 0;
+                $f3max  = $qd['f3_flux_max'] ?? $td['f3_flux_max'] ?? 0;
+                $f4flux = $qd['f4_flux'] ?? $td['f4_flux'] ?? 0;
+                $f4max  = $qd['f4_flux_max'] ?? $td['f4_flux_max'] ?? 0;
+
+                $fl1 = !empty($f1max) && $f1max > 0 ? max(0, min(100, round((1 - $f1flux / $f1max) * 100))) : 100;
+                $fl2 = !empty($f2max) && $f2max > 0 ? max(0, min(100, round((1 - $f2flux / $f2max) * 100))) : 100;
+                $fl3 = !empty($f3max) && $f3max > 0 ? max(0, min(100, round((1 - $f3flux / $f3max) * 100))) : 100;
+                $fl4 = !empty($f4max) && $f4max > 0 ? max(0, min(100, round((1 - $f4flux / $f4max) * 100))) : 100;
 
                 $remaining_days = 0;
                 if (!empty($d['service_end_date'])) {
                     $days = floor((strtotime($d['service_end_date']) - time()) / 86400);
                     $remaining_days = $days > 0 ? $days : 0;
+                }
+
+                // 剩余流量：优先 qiyun > tapp > ytb
+                $realSurplusFlow = (float)($qd['surplus_flow'] ?? $td['surplus_flow'] ?? $d['surplus_flow'] ?? 0);
+
+                // 累计用水量计算（多级 fallback）：
+                // 1. qiyun cumulative_flow（如果 > 0）
+                // 2. tapp cumulative_filtration_flow（如果 > 0）
+                // 3. qiyun total_recharged_flow - surplus_flow（计算得出）
+                // 4. ytb cumulative_flow（最后 fallback）
+                $totalWater = 0;
+                $qdCumFlow = (float)($qd['cumulative_flow'] ?? 0);
+                $tdCumFlow = (float)($td['cumulative_filtration_flow'] ?? 0);
+                $qdTotalRecharged = (float)($qd['total_recharged_flow'] ?? 0);
+                $qdSurplus = (float)($qd['surplus_flow'] ?? 0);
+
+                if ($qdCumFlow > 0) {
+                    $totalWater = $qdCumFlow;
+                } elseif ($tdCumFlow > 0) {
+                    $totalWater = $tdCumFlow;
+                } elseif ($qdTotalRecharged > 0 && $qdSurplus >= 0) {
+                    $totalWater = max(0, $qdTotalRecharged - $qdSurplus);
+                } else {
+                    $totalWater = (float)($d['cumulative_flow'] ?? 0);
                 }
 
                 $deviceData = [
@@ -618,24 +655,39 @@ try {
                     'iccid' => $d['iccid'] ?? '',
                     'is_primary' => 1,
                     'billing_mode' => $billing_mode,
-                    'surplus_flow' => (float)($d['surplus_flow'] ?? 0),
+                    'surplus_flow' => $realSurplusFlow,
                     'remaining_days' => $remaining_days,
-                    'total_water' => (float)($d['cumulative_flow'] ?? 0),
+                    'total_water' => round($totalWater, 1),
                     'today_water' => 0,
                     'month_water' => 0,
                     'is_online' => $is_online,
                     'network_status' => $is_online ? 'online' : 'offline',
                     'is_power_on' => $is_online,
                     'has_fault' => false,
-                    'is_activated' => !empty($d['activate_date']),
-                    'raw_water_value' => (float)($d['raw_water_tds'] ?? 0),
-                    'purification_water_value' => (float)($d['pure_water_tds'] ?? 0),
+                    'is_activated' => !empty($d['activate_date']) || !empty($d['service_end_date']),
+                    'raw_water_value' => (float)($qd['raw_water_tds'] ?? $d['raw_water_tds'] ?? 0),
+                    'purification_water_value' => (float)($qd['pure_water_tds'] ?? $d['pure_water_tds'] ?? 0),
                     'signal_intensity' => $d['signal_strength'] ?? 0,
                     'service_end_date' => $d['service_end_date'] ?? '',
-                    'last_online_at' => $td['last_sync_time'] ?? '',
-                    'used_days' => !empty($d['activate_date']) ? floor((time() - strtotime($d['activate_date'])) / 86400) : 0,
-                    'bind_time' => $d['activate_date'] ?? $d['create_date'] ?? '',
-                    'activate_date' => $d['activate_date'] ?? '',
+                    'last_online_at' => $qd['last_sync_at'] ?? $td['last_sync_time'] ?? '',
+                    'used_days' => (function() use ($d) {
+                        // 优先用 activate_date 计算使用天数
+                        $startDate = $d['activate_date'] ?: $d['create_date'] ?? null;
+                        if (!empty($startDate)) {
+                            $days = floor((time() - strtotime($startDate)) / 86400);
+                            return max(0, $days);
+                        }
+                        // 如果都为空，从 service_end_date 反推（包年模式一般365天）
+                        if (!empty($d['service_end_date'])) {
+                            $endTs = strtotime($d['service_end_date']);
+                            $totalServiceDays = 365; // 默认包年365天
+                            $remaining = floor(($endTs - time()) / 86400);
+                            return max(0, $totalServiceDays - max(0, $remaining));
+                        }
+                        return 0;
+                    })(),
+                    'bind_time' => $d['activate_date'] ?: ($d['create_date'] ?? ''),
+                    'activate_date' => $d['activate_date'] ?: ($d['create_date'] ?? ''),
                     'filters' => [
                        ['name' => 'PP棉滤芯', 'life' => $fl1],
                        ['name' => '前置活性炭', 'life' => $fl2],
@@ -2856,6 +2908,10 @@ try {
                 'is_vip_paid' => 1,
                 'direct_vip_count' => 2,
                 'team_vip_count' => 5,
+                'month_direct_vip' => 1,
+                'month_team_vip' => 2,
+                'last_month_direct_vip' => 1,
+                'last_month_team_vip' => 3,
                 'vip_at' => '2026-01-15 10:30:00',
                 'vip_paid_at' => '2026-01-15 10:30:00',
                 'created_at' => '2026-01-15 10:30:00',
@@ -2877,6 +2933,10 @@ try {
                 'is_vip_paid' => 1,
                 'direct_vip_count' => 3,
                 'team_vip_count' => 8,
+                'month_direct_vip' => 2,
+                'month_team_vip' => 4,
+                'last_month_direct_vip' => 1,
+                'last_month_team_vip' => 4,
                 'vip_at' => '2026-02-20 14:20:00',
                 'vip_paid_at' => '2026-02-20 14:20:00',
                 'created_at' => '2026-02-20 14:20:00',
@@ -3133,7 +3193,9 @@ try {
         $list = [];
 
         // 从 qiyun_devices 获取心跳时间，用于判断真实在线状态
+        // 同时从 tapp_devices 获取累计过滤流量（IOT实时数据）
         $qiyunOnlineMap = [];
+        $tappFlowMap = [];
         $deviceNumbers = array_filter(array_column($devices, 'device_number'));
         if (!empty($deviceNumbers)) {
             try {
@@ -3149,6 +3211,12 @@ try {
                         'last_sync_at' => $qd['last_sync_at'],
                     ];
                 }
+                // 批量获取tapp_devices的累计流量和剩余流量
+                $tdStmt = $tappDb->prepare("SELECT device_number, cumulative_filtration_flow, surplus_flow FROM tapp_devices WHERE device_number IN ($dp)");
+                $tdStmt->execute(array_values($deviceNumbers));
+                while ($td = $tdStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $tappFlowMap[$td['device_number']] = $td;
+                }
             } catch (Exception $e) {}
         }
 
@@ -3161,8 +3229,13 @@ try {
             // 通过心跳判断在线状态
             $devNum = $d['device_number'] ?? '';
             $qiyunInfo = $qiyunOnlineMap[$devNum] ?? null;
+            $tappInfo = $tappFlowMap[$devNum] ?? null;
             $isOnline = $qiyunInfo ? $qiyunInfo['is_online'] : false;
             if ($isOnline) $onlineCount++;
+
+            // 优先使用tapp实时数据
+            $realSurplusFlow = floatval($tappInfo['surplus_flow'] ?? $d['surplus_flow'] ?? 0);
+            $realCumulativeFlow = floatval($tappInfo['cumulative_filtration_flow'] ?? $d['cumulative_flow'] ?? 0);
 
             // 计算进度百分比
             $waterLevelPct = 0;
@@ -3171,10 +3244,9 @@ try {
             $isExpireSoon = false;
 
             if ($d['billing_mode'] == 'flow') {
-                $surplus = floatval($d['surplus_flow'] ?? 0);
                 $totalFlow = floatval($d['total_recharged_flow'] ?? 4500);
-                $waterLevelPct = $totalFlow > 0 ? min(100, round($surplus / $totalFlow * 100)) : 0;
-                $isLowWater = $surplus < 100;
+                $waterLevelPct = $totalFlow > 0 ? min(100, round($realSurplusFlow / $totalFlow * 100)) : 0;
+                $isLowWater = $realSurplusFlow < 100;
             }
 
             $list[] = [
@@ -3202,13 +3274,13 @@ try {
                 'sale_dealer_name' => '',
                 'billing_mode' => $d['billing_mode'] ?? 'flow',
                 'billing_mode_text' => $billingMap[$d['billing_mode']] ?? '未知',
-                'surplus_flow' => floatval($d['surplus_flow'] ?? 0),
+                'surplus_flow' => $realSurplusFlow,
                 'water_level_percentage' => $waterLevelPct,
                 'is_low_water' => $isLowWater,
                 'remaining_days' => 0,
                 'days_percentage' => 0,
                 'is_expire_soon' => false,
-                'cumulative_filtration_flow' => floatval($d['cumulative_flow'] ?? 0),
+                'cumulative_filtration_flow' => $realCumulativeFlow,
                 'tds_in' => $d['raw_water_tds'] ?? '',
                 'tds_out' => $d['pure_water_tds'] ?? '',
                 'raw_water_value' => $d['raw_water_tds'] ?? '',
