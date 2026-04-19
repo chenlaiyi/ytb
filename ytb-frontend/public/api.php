@@ -1128,7 +1128,7 @@ try {
         exit;
     }
 
-    // YTB 获取海报列表
+    // YTB 获取海报列表（用户端）
     if ($path === 'ytb/posters' && $method === 'GET') {
         $user = authenticateYtbUser($db, $token);
         if (!$user) {
@@ -1136,10 +1136,21 @@ try {
             echo json_encode(['code' => 401, 'message' => '未登录或登录已过期'], JSON_UNESCAPED_UNICODE);
             exit;
         }
+        $type = $_GET['type'] ?? '';
         try {
-            $stmt = $db->prepare('SELECT * FROM ytb_posters WHERE status = "active" ORDER BY sort_order ASC, created_at DESC');
-            $stmt->execute();
+            $where = 'WHERE status = 1';
+            $params = [];
+            if ($type) {
+                $where .= ' AND type = ?';
+                $params[] = $type;
+            }
+            $stmt = $db->prepare("SELECT id, title, type, image_url, description, sort_order, created_at FROM ytb_posters $where ORDER BY sort_order ASC, created_at DESC");
+            $stmt->execute($params);
             $posters = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($posters as &$p) {
+                $p['id'] = (int)$p['id'];
+                $p['sort_order'] = (int)$p['sort_order'];
+            }
         } catch (Exception $e) {
             $posters = [];
         }
@@ -2879,6 +2890,174 @@ try {
             'message' => '获取成功',
             'data' => $configs
         ]);
+        exit;
+    }
+
+    // ===== 管理后台 - 海报管理 CRUD =====
+
+    // 获取海报列表
+    if (($path === 'admin/api/v1/posters' || $path === 'admin/v1/ytb/posters') && $method === 'GET') {
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(50, max(1, (int)($_GET['per_page'] ?? 20)));
+        $offset = ($page - 1) * $perPage;
+        $search = trim($_GET['search'] ?? '');
+        $status = $_GET['status'] ?? '';
+        $type = $_GET['type'] ?? '';
+
+        $where = [];
+        $params = [];
+        if ($search) {
+            $where[] = 'title LIKE ?';
+            $params[] = "%{$search}%";
+        }
+        if ($status !== '') {
+            $where[] = 'status = ?';
+            $params[] = (int)$status;
+        }
+        if ($type) {
+            $where[] = 'type = ?';
+            $params[] = $type;
+        }
+        $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $countStmt = $db->prepare("SELECT COUNT(*) FROM ytb_posters $whereClause");
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetchColumn();
+
+        $listStmt = $db->prepare("SELECT * FROM ytb_posters $whereClause ORDER BY sort_order ASC, created_at DESC LIMIT $offset, $perPage");
+        $listStmt->execute($params);
+        $list = $listStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 格式化
+        foreach ($list as &$item) {
+            $item['id'] = (int)$item['id'];
+            $item['sort_order'] = (int)$item['sort_order'];
+            $item['status'] = (int)$item['status'];
+        }
+
+        echo json_encode([
+            'code' => 0,
+            'message' => 'ok',
+            'data' => [
+                'list' => $list,
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+                'last_page' => ceil($total / $perPage)
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 获取海报详情
+    if (preg_match('#^(admin/api/v1|admin/v1/ytb)/posters/(\d+)$#', $path, $matches) && $method === 'GET') {
+        $posterId = (int)$matches[2];
+        $stmt = $db->prepare("SELECT * FROM ytb_posters WHERE id = ?");
+        $stmt->execute([$posterId]);
+        $poster = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$poster) {
+            echo json_encode(['code' => 404, 'message' => '海报不存在'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $poster['id'] = (int)$poster['id'];
+        $poster['sort_order'] = (int)$poster['sort_order'];
+        $poster['status'] = (int)$poster['status'];
+        echo json_encode(['code' => 0, 'message' => 'ok', 'data' => $poster], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 创建海报
+    if (($path === 'admin/api/v1/posters' || $path === 'admin/v1/ytb/posters') && $method === 'POST') {
+        $title = trim($input['title'] ?? '');
+        $type = trim($input['type'] ?? 'promotion');
+        $imageUrl = trim($input['image_url'] ?? '');
+        $description = trim($input['description'] ?? '');
+        $sortOrder = (int)($input['sort_order'] ?? 0);
+        $status = (int)($input['status'] ?? 1);
+
+        if (!$title) {
+            echo json_encode(['code' => 400, 'message' => '标题不能为空'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if (!$imageUrl) {
+            echo json_encode(['code' => 400, 'message' => '图片不能为空'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $stmt = $db->prepare("INSERT INTO ytb_posters (title, type, image_url, description, sort_order, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())");
+        $stmt->execute([$title, $type, $imageUrl, $description, $sortOrder, $status]);
+        $newId = $db->lastInsertId();
+
+        echo json_encode(['code' => 0, 'message' => '创建成功', 'data' => ['id' => (int)$newId]], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 更新海报
+    if (preg_match('#^(admin/api/v1|admin/v1/ytb)/posters/(\d+)$#', $path, $matches) && $method === 'PUT') {
+        $posterId = (int)$matches[2];
+        $fields = [];
+        $params = [];
+        foreach (['title', 'type', 'image_url', 'description'] as $f) {
+            if (isset($input[$f])) { $fields[] = "$f = ?"; $params[] = $input[$f]; }
+        }
+        if (isset($input['sort_order'])) { $fields[] = "sort_order = ?"; $params[] = (int)$input['sort_order']; }
+        if (isset($input['status'])) { $fields[] = "status = ?"; $params[] = (int)$input['status']; }
+
+        if (empty($fields)) {
+            echo json_encode(['code' => 400, 'message' => '没有要更新的字段'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $fields[] = "updated_at = NOW()";
+        $params[] = $posterId;
+        $stmt = $db->prepare("UPDATE ytb_posters SET " . implode(', ', $fields) . " WHERE id = ?");
+        $stmt->execute($params);
+
+        echo json_encode(['code' => 0, 'message' => '更新成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 删除海报
+    if (preg_match('#^(admin/api/v1|admin/v1/ytb)/posters/(\d+)$#', $path, $matches) && $method === 'DELETE') {
+        $posterId = (int)$matches[2];
+        $stmt = $db->prepare("DELETE FROM ytb_posters WHERE id = ?");
+        $stmt->execute([$posterId]);
+        echo json_encode(['code' => 0, 'message' => '删除成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 切换海报状态
+    if (preg_match('#^(admin/api/v1|admin/v1/ytb)/posters/(\d+)/status$#', $path, $matches) && $method === 'PATCH') {
+        $posterId = (int)$matches[2];
+        $status = (int)($input['status'] ?? 0);
+        $stmt = $db->prepare("UPDATE ytb_posters SET status = ?, updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$status, $posterId]);
+        echo json_encode(['code' => 0, 'message' => '状态更新成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 批量删除海报
+    if (($path === 'admin/api/v1/posters/batch' || $path === 'admin/v1/ytb/posters/batch') && $method === 'DELETE') {
+        $ids = $input['ids'] ?? [];
+        if (!empty($ids)) {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $stmt = $db->prepare("DELETE FROM ytb_posters WHERE id IN ($placeholders)");
+            $stmt->execute(array_values($ids));
+        }
+        echo json_encode(['code' => 0, 'message' => '批量删除成功'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // 批量更新状态
+    if (($path === 'admin/api/v1/posters/batch/status' || $path === 'admin/v1/ytb/posters/batch/status') && $method === 'PATCH') {
+        $ids = $input['ids'] ?? [];
+        $status = (int)($input['status'] ?? 0);
+        if (!empty($ids)) {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $params = array_merge([$status], array_values($ids));
+            $stmt = $db->prepare("UPDATE ytb_posters SET status = ?, updated_at = NOW() WHERE id IN ($placeholders)");
+            $stmt->execute($params);
+        }
+        echo json_encode(['code' => 0, 'message' => '批量更新成功'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
